@@ -1,0 +1,18 @@
+{
+  "app:slack": 0.03,
+  "location:office": 0.03,
+  "activity:working": 0.03,
+  "hour_bucket:work_hours": -0.3600000000000001,
+  "app:slack+activity:working": 0.03,
+  "app:youtube": -0.03,
+  "location:home": -0.4,
+  "activity:scrolling": -0.03,
+  "app:youtube+activity:scrolling": -0.03,
+  "app:whatsapp": -0.3600000000000001,
+  "activity:study": -0.3600000000000001,
+  "app:whatsapp+activity:study": -0.3600000000000001,
+  "app:gmail": -0.06,
+  "activity:idle": -0.06,
+  "hour_bucket:evening": -0.06,
+  "app:gmail+activity:idle": -0.06
+}

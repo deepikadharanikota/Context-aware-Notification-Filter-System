@@ -1,0 +1,322 @@
+[
+  {
+    "verdict": "correct",
+    "action": "send_now",
+    "score": 0.952,
+    "ctx": {
+      "app": "slack",
+      "location": "office",
+      "activity": "working",
+      "hour": 10,
+      "sender": "friend"
+    },
+    "keys": [
+      "app:slack",
+      "location:office",
+      "activity:working",
+      "hour_bucket:work_hours",
+      "app:slack+activity:working"
+    ],
+    "direction": 1
+  },
+  {
+    "verdict": "correct",
+    "action": "batch",
+    "score": 0.0,
+    "ctx": {
+      "app": "youtube",
+      "location": "home",
+      "activity": "scrolling",
+      "hour": 14,
+      "sender": "friend"
+    },
+    "keys": [
+      "app:youtube",
+      "location:home",
+      "activity:scrolling",
+      "hour_bucket:work_hours",
+      "app:youtube+activity:scrolling"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 1.0,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 1.0,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.927,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.791,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 12,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 17,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 17,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "wrong",
+    "action": "send_now",
+    "score": 0.773,
+    "ctx": {
+      "app": "whatsapp",
+      "location": "home",
+      "activity": "study",
+      "hour": 17,
+      "sender": "goldloan"
+    },
+    "keys": [
+      "app:whatsapp",
+      "location:home",
+      "activity:study",
+      "hour_bucket:work_hours",
+      "app:whatsapp+activity:study"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "correct",
+    "action": "batch",
+    "score": 0.655,
+    "ctx": {
+      "app": "gmail",
+      "location": "home",
+      "activity": "idle",
+      "hour": 18,
+      "sender": "sale"
+    },
+    "keys": [
+      "app:gmail",
+      "location:home",
+      "activity:idle",
+      "hour_bucket:evening",
+      "app:gmail+activity:idle"
+    ],
+    "direction": -1
+  },
+  {
+    "verdict": "correct",
+    "action": "batch",
+    "score": 0.557,
+    "ctx": {
+      "app": "gmail",
+      "location": "home",
+      "activity": "idle",
+      "hour": 18,
+      "sender": "sale"
+    },
+    "keys": [
+      "app:gmail",
+      "location:home",
+      "activity:idle",
+      "hour_bucket:evening",
+      "app:gmail+activity:idle"
+    ],
+    "direction": -1
+  }
+]

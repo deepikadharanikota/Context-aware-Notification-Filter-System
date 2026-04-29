@@ -1,0 +1,51 @@
+<TaskerData sr="" dvi="1" tv="6.2">
+  <Profile sr="prof0" ve="2">
+    <cdate>1712000000000</cdate>
+    <edate>1712000000000</edate>
+    <id>1</id>
+    <mid0>1</mid0>
+    <nme>NeuralNotify Bridge</nme>
+    <Event sr="con0" ve="2">
+      <code>9</code>
+      <!-- Notification event: fires on EVERY app notification -->
+      <Str sr="arg0" ve="3">*</Str>
+      <Int sr="arg1" val="0"/>
+      <Str sr="arg2" ve="3"/>
+    </Event>
+  </Profile>
+
+  <Task sr="task1">
+    <cdate>1712000000000</cdate>
+    <edate>1712000000000</edate>
+    <id>1</id>
+    <nme>Forward to NeuralNotify</nme>
+
+    <!-- Action 1: HTTP POST to NeuralNotify /push endpoint -->
+    <Action sr="act0" ve="7">
+      <code>339</code>
+      <!-- HTTP Request -->
+      <Str sr="arg0" ve="3">POST</Str>
+      <!-- CHANGE THIS to your server IP/port -->
+      <Str sr="arg1" ve="3">http://192.168.1.100:8000/push</Str>
+      <Str sr="arg2" ve="3">Content-Type:application/json</Str>
+      <Str sr="arg3" ve="3">{
+  "app": "%entryappname",
+  "package": "%entryappname",
+  "sender": "%entrytitle",
+  "message": "%entrytext",
+  "title": "%entrytitle",
+  "context": {
+    "hour": %TIMEH,
+    "location": "home",
+    "activity": "idle"
+  }
+}</Str>
+      <Str sr="arg4" ve="3"/>
+      <Str sr="arg5" ve="3">application/json</Str>
+      <Str sr="arg6" ve="3">result</Str>
+      <Int sr="arg7" val="30"/>
+      <Int sr="arg8" val="0"/>
+    </Action>
+
+  </Task>
+</TaskerData>

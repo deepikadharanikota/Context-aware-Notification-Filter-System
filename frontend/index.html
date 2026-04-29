@@ -1,0 +1,3105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NeuralNotify</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:       #04060e;
+    --panel:    rgba(255,255,255,0.03);
+    --border:   rgba(255,255,255,0.07);
+    --glow-g:   #00ffa3;
+    --glow-b:   #00c2ff;
+    --glow-p:   #b46eff;
+    --text:     #e8eaf6;
+    --muted:    rgba(232,234,246,0.45);
+    --send:     #00ffa3;
+    --delay:    #f9c846;
+    --batch:    #ff6b6b;
+    --radius:   16px;
+    --font-h:   'Syne', sans-serif;
+    --font-m:   'Space Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-m);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Noise overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  /* ── Gradient mesh ── */
+  .mesh {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 40% at 15% 20%, rgba(0,255,163,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 85% 75%, rgba(0,194,255,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 70% 10%, rgba(180,110,255,0.06) 0%, transparent 60%);
+  }
+
+  /* ── Layout ── */
+  .app {
+    position: relative; z-index: 1;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: flex-end; gap: 20px;
+    margin-bottom: 48px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-icon {
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, var(--glow-g), var(--glow-b));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 0 30px rgba(0,255,163,0.3);
+    flex-shrink: 0;
+    animation: pulse-logo 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-logo {
+    0%, 100% { box-shadow: 0 0 30px rgba(0,255,163,0.3); }
+    50% { box-shadow: 0 0 50px rgba(0,255,163,0.5), 0 0 80px rgba(0,194,255,0.2); }
+  }
+
+  .logo-text h1 {
+    font-family: var(--font-h);
+    font-size: 28px;
+    font-weight: 800;
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b), var(--glow-p));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text p {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .header-stats {
+    margin-left: auto;
+    display: flex; gap: 16px; align-items: flex-end;
+  }
+
+  .stat-pill {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .stat-pill strong { color: var(--text); }
+
+  /* ── Grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── Panel / Card ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .panel-title {
+    font-family: var(--font-h);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .panel-title::before {
+    content: '';
+    display: block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--glow-g);
+    box-shadow: 0 0 8px var(--glow-g);
+  }
+
+  /* ── Form elements ── */
+  label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  input[type="text"], textarea, select {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-m);
+    font-size: 13px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  input[type="text"]:focus, textarea:focus, select:focus {
+    border-color: rgba(0,255,163,0.4);
+    box-shadow: 0 0 0 3px rgba(0,255,163,0.08);
+  }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  select option { background: #0c0f1e; }
+
+  .field { margin-bottom: 16px; }
+
+  /* ── Two-col fields ── */
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Range slider ── */
+  .slider-wrap { position: relative; padding-bottom: 4px; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--glow-g), var(--glow-b));
+    box-shadow: 0 0 10px rgba(0,255,163,0.5);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+  .slider-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--muted); margin-top: 4px;
+  }
+
+  .hour-val {
+    display: inline-block;
+    background: rgba(0,255,163,0.1);
+    border: 1px solid rgba(0,255,163,0.25);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: var(--glow-g);
+    margin-left: 8px;
+  }
+
+  /* ── App selector chips ── */
+  .app-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .app-chip {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+    user-select: none;
+  }
+
+  .app-chip:hover { border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); }
+
+  .app-chip.selected {
+    border-color: var(--glow-g);
+    background: rgba(0,255,163,0.08);
+    box-shadow: 0 0 12px rgba(0,255,163,0.15);
+  }
+
+  .app-chip .emoji { font-size: 20px; display: block; margin-bottom: 4px; }
+  .app-chip .name { font-size: 9px; color: var(--muted); letter-spacing: 0.05em; }
+  .app-chip.selected .name { color: var(--glow-g); }
+
+  /* ── Submit button ── */
+  .btn-analyze {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+    color: #000;
+    font-family: var(--font-h);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s, box-shadow 0.15s;
+    margin-top: 8px;
+  }
+
+  .btn-analyze:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 30px rgba(0,255,163,0.3);
+  }
+
+  .btn-analyze:active { transform: translateY(0); }
+
+  .btn-analyze::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s;
+  }
+
+  .btn-analyze:hover::after { transform: translateX(100%); }
+
+  .btn-analyze:disabled {
+    opacity: 0.5; cursor: not-allowed; transform: none;
+  }
+
+  /* ── Result card ── */
+  .result-card {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 20px;
+    animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-header {
+    padding: 20px 24px;
+    display: flex; align-items: center; gap: 16px;
+  }
+
+  .result-card.send_now { border-color: rgba(0,255,163,0.3); }
+  .result-card.send_now .result-header { background: rgba(0,255,163,0.06); }
+
+  .result-card.delay { border-color: rgba(249,200,70,0.3); }
+  .result-card.delay .result-header { background: rgba(249,200,70,0.06); }
+
+  .result-card.batch { border-color: rgba(255,107,107,0.3); }
+  .result-card.batch .result-header { background: rgba(255,107,107,0.06); }
+
+  .action-badge {
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .send_now .action-badge { background: rgba(0,255,163,0.15); color: var(--send); border: 1px solid rgba(0,255,163,0.3); }
+  .delay .action-badge { background: rgba(249,200,70,0.15); color: var(--delay); border: 1px solid rgba(249,200,70,0.3); }
+  .batch .action-badge { background: rgba(255,107,107,0.15); color: var(--batch); border: 1px solid rgba(255,107,107,0.3); }
+
+  .result-summary { flex: 1; font-size: 13px; color: var(--text); line-height: 1.5; }
+
+  .score-ring {
+    width: 56px; height: 56px;
+    position: relative; flex-shrink: 0;
+  }
+
+  .score-ring svg { transform: rotate(-90deg); }
+
+  .score-ring circle {
+    fill: none;
+    stroke-width: 4;
+    stroke-linecap: round;
+  }
+
+  .score-ring .track { stroke: rgba(255,255,255,0.06); }
+  .score-ring .arc { transition: stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1); }
+
+  .score-val {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  .result-body { padding: 16px 24px; display: flex; gap: 24px; flex-wrap: wrap; }
+
+  .ctx-tag {
+    font-size: 10px; color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+  }
+
+  .ctx-tag span { color: var(--text); }
+
+  /* ── History ── */
+  .history-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .history-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  .history-item:hover { background: rgba(255,255,255,0.04); }
+
+  .h-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .h-dot.send_now { background: var(--send); box-shadow: 0 0 6px var(--send); }
+  .h-dot.delay { background: var(--delay); }
+  .h-dot.batch { background: var(--batch); }
+
+  .h-app { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); width: 60px; flex-shrink: 0; }
+  .h-summary { flex: 1; font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-score { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+
+  /* ── Donut chart ── */
+  .donut-wrap { display: flex; align-items: center; gap: 20px; }
+
+  .donut-wrap svg { flex-shrink: 0; }
+
+  .donut-legend { display: flex; flex-direction: column; gap: 8px; }
+
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center; padding: 32px 16px;
+    color: var(--muted); font-size: 12px; line-height: 1.8;
+  }
+
+  .empty .icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: rgba(0,0,0,0.8);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block; vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Feedback thumbs ── */
+  .feedback-row { display: flex; gap: 8px; margin-top: 8px; padding: 0 24px 16px; }
+
+  .fb-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .fb-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .fb-btn.active { background: rgba(0,255,163,0.1); border-color: var(--glow-g); color: var(--glow-g); }
+  .rl-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px;
+              color: var(--glow-g); background: rgba(0,255,163,0.07);
+              border: 1px solid rgba(0,255,163,0.2); border-radius:6px;
+              padding:2px 8px; margin-left:auto; }
+
+  /* ── Separator ── */
+  .sep { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* ── Nav Tabs ── */
+  .nav-tabs {
+    display: flex; gap: 4px;
+    margin-bottom: 28px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+  }
+  .nav-tab {
+    flex: 1; padding: 10px 16px;
+    border: none; border-radius: 9px;
+    cursor: pointer;
+    font-family: var(--font-h);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+  .nav-tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .nav-tab.active {
+    background: linear-gradient(135deg, rgba(0,255,163,0.15), rgba(0,194,255,0.1));
+    color: var(--glow-g);
+    border: 1px solid rgba(0,255,163,0.2);
+    box-shadow: 0 0 20px rgba(0,255,163,0.08);
+  }
+
+  /* ── Priority Settings Page ── */
+  .priority-page { display: none; }
+  .learning-page { display: none; padding: 24px 0; }
+  .rl-section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 24px; margin-bottom: 16px; }
+  .rl-section h3 { font-size: 13px; font-weight: 600; margin: 0 0 14px; color: var(--text); }
+  .weight-bar-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .weight-key { font-size: 11px; color: var(--muted); width: 220px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .weight-bar-track { flex: 1; height: 6px; background: rgba(255,255,255,0.06); border-radius: 99px; position: relative; }
+  .weight-bar-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+  .weight-val { font-size: 11px; width: 42px; text-align: right; flex-shrink: 0; }
+  .rl-stat-row { display: flex; gap: 12px; margin-bottom: 14px; }
+  .rl-stat { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .rl-stat-val { font-size: 22px; font-weight: 700; color: var(--text); }
+  .rl-stat-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .fb-log-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 11px; }
+  .fb-verdict { width: 18px; text-align: center; }
+  .fb-app { color: var(--muted); width: 70px; }
+  .fb-ctx { color: var(--muted); flex: 1; }
+  .fb-action { font-size: 10px; padding: 2px 7px; border-radius: 5px; background: rgba(255,255,255,0.06); }
+  .btn-rl-reset { background: rgba(255,60,60,0.08); border: 1px solid rgba(255,60,60,0.2); color: #ff6060; border-radius: 8px; padding: 8px 18px; font-size: 12px; cursor: pointer; }
+  .btn-rl-reset:hover { background: rgba(255,60,60,0.15); }
+  .priority-page.active { display: block; }
+  .main-page { display: block; }
+  .main-page.hidden { display: none; }
+
+  /* ── Priority Settings Sections ── */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .settings-grid.full { grid-template-columns: 1fr; }
+
+  .settings-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    backdrop-filter: blur(12px);
+  }
+
+  .section-title {
+    font-family: var(--font-h);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--glow-b); box-shadow: 0 0 8px var(--glow-b);
+  }
+
+  /* ── VIP Persons List ── */
+  .vip-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .vip-item {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    animation: slideIn 0.3s ease;
+  }
+  .vip-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--glow-g), var(--glow-b));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+    font-weight: 700; color: #000;
+    font-family: var(--font-h);
+  }
+  .vip-info { flex: 1; }
+  .vip-name { font-size: 13px; color: var(--text); font-weight: 600; }
+  .vip-app { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .vip-boost {
+    font-size: 10px; color: var(--glow-g);
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 6px; padding: 2px 8px; flex-shrink: 0;
+  }
+  .vip-remove {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 14px; padding: 4px; border-radius: 6px;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .vip-remove:hover { color: var(--batch); background: rgba(255,107,107,0.1); }
+
+  .add-vip-row {
+    display: flex; gap: 8px;
+  }
+  .add-vip-row input { flex: 1; }
+  .add-vip-row select { width: 110px; flex-shrink: 0; }
+  .btn-add {
+    padding: 10px 14px; border: none; border-radius: 10px;
+    background: rgba(0,255,163,0.12); border: 1px solid rgba(0,255,163,0.3);
+    color: var(--glow-g); cursor: pointer; font-size: 18px;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .btn-add:hover { background: rgba(0,255,163,0.2); transform: scale(1.05); }
+
+  /* ── App Priority Sliders ── */
+  .app-priority-list { display: flex; flex-direction: column; gap: 14px; }
+  .app-priority-item { }
+  .app-priority-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .app-priority-label {
+    font-size: 12px; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .app-priority-label .emoji-sm { font-size: 16px; }
+  .app-priority-val {
+    font-size: 11px; color: var(--glow-b);
+    background: rgba(0,194,255,0.08); border: 1px solid rgba(0,194,255,0.2);
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .priority-track {
+    position: relative; height: 6px;
+    background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;
+  }
+  .priority-fill {
+    position: absolute; left: 0; top: 0; height: 100%;
+    border-radius: 3px; transition: width 0.3s ease;
+  }
+  input[type="range"].app-slider {
+    position: absolute; inset: -5px 0; opacity: 0; cursor: pointer; height: 16px;
+    margin: 0;
+  }
+  .priority-track-wrap { position: relative; }
+
+  /* ── Keyword Tags ── */
+  .keyword-tags {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+  }
+  .keyword-tag {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(180,110,255,0.1); border: 1px solid rgba(180,110,255,0.3);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 11px; color: #c89bff;
+    animation: slideIn 0.25s ease;
+  }
+  .keyword-tag .ktag-remove {
+    background: none; border: none; color: rgba(180,110,255,0.5);
+    cursor: pointer; font-size: 12px; padding: 0; line-height: 1;
+    transition: color 0.2s;
+  }
+  .keyword-tag .ktag-remove:hover { color: var(--batch); }
+  .keyword-tag.spam-tag { background: rgba(255,96,96,0.12); border-color: rgba(255,96,96,0.3); color: #ff9090; }
+  .keyword-tag.spam-tag .ktag-remove:hover { color: #ff6060; }
+  .add-keyword-row { display: flex; gap: 8px; }
+  .add-keyword-row input { flex: 1; }
+  /* Spam blocked card */
+  .result-card.spam { border-color: rgba(255,96,96,0.3); }
+  .result-card.spam .result-header { background: rgba(255,96,96,0.06); }
+  .spam .action-badge { background: rgba(255,96,96,0.15); color: #ff9090; border: 1px solid rgba(255,96,96,0.3); }
+  .h-dot.spam { background: #ff6060; box-shadow: 0 0 6px #ff6060; }
+  /* Toggle pill */
+  .toggle-pill { width:36px;height:20px;border-radius:10px;background:rgba(255,96,96,0.3);border:1px solid rgba(255,96,96,0.4);cursor:pointer;transition:.2s;position:relative; }
+  .toggle-pill::after { content:'';position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:#ff6060;transition:.2s; }
+  .toggle-pill.on { background:rgba(0,255,163,0.2);border-color:rgba(0,255,163,0.4); }
+  .toggle-pill.on::after { left:19px;background:#00ffa3; }
+  /* Scheduled queue panel */
+  .sched-item { display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(249,200,70,0.04);border:1px solid rgba(249,200,70,0.15);border-radius:10px;margin-bottom:6px; }
+  .sched-dot { width:8px;height:8px;border-radius:50%;background:var(--delay);box-shadow:0 0 6px var(--delay);flex-shrink:0;margin-top:4px; }
+
+  /* ── Focus Hours ── */
+  .hours-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 4px; margin-bottom: 14px;
+  }
+  .hour-cell {
+    aspect-ratio: 1; border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--muted);
+    cursor: pointer; transition: all 0.15s;
+    user-select: none;
+  }
+  .hour-cell:hover { border-color: rgba(180,110,255,0.4); }
+  .hour-cell.active {
+    background: rgba(180,110,255,0.15);
+    border-color: rgba(180,110,255,0.5);
+    color: #c89bff;
+    box-shadow: 0 0 10px rgba(180,110,255,0.15);
+  }
+  .hours-legend {
+    display: flex; gap: 14px; font-size: 10px; color: var(--muted);
+  }
+  .hours-legend span { display: flex; align-items: center; gap: 5px; }
+  .legend-sq { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* ── Threshold ── */
+  .threshold-visual {
+    display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  }
+  .th-zone { transition: width 0.3s; display: flex; align-items: center; justify-content: center; }
+  .th-zone.send { background: rgba(0,255,163,0.35); }
+  .th-zone.delay { background: rgba(249,200,70,0.35); }
+  .th-zone.batch { background: rgba(255,107,107,0.35); }
+  .threshold-labels {
+    display: flex; justify-content: space-between; font-size: 10px; color: var(--muted);
+  }
+
+  /* ── Save button ── */
+  .btn-save-settings {
+    width: 100%; padding: 14px;
+    border: none; border-radius: 12px;
+    background: linear-gradient(90deg, rgba(0,255,163,0.8), rgba(0,194,255,0.8));
+    color: #000; font-family: var(--font-h);
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 0.05em; cursor: pointer;
+    transition: all 0.2s; margin-top: 8px;
+  }
+  .btn-save-settings:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 30px rgba(0,255,163,0.3);
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+  }
+  .save-toast {
+    display: none; align-items: center; gap: 8px;
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.3);
+    border-radius: 10px; padding: 10px 16px; margin-top: 12px;
+    font-size: 12px; color: var(--glow-g);
+    animation: slideIn 0.3s ease;
+  }
+  .save-toast.show { display: flex; }
+
+  /* ── Responsive ── */
+  @media (max-width: 780px) {
+    .grid { grid-template-columns: 1fr; }
+    .header-stats { display: none; }
+    .settings-grid { grid-template-columns: 1fr; }
+    .hours-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  /* ── Bundle Mode ── */
+  .bundle-toggle { display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; cursor:pointer; user-select:none; }
+  .bundle-toggle input[type=checkbox] { accent-color:var(--glow-g); width:16px; height:16px; cursor:pointer; }
+  .bundle-toggle-label { font-size:12px; font-weight:600; color:var(--text); }
+  .bundle-toggle-sub   { font-size:11px; color:var(--muted); margin-left:auto; }
+
+  .bundle-panel { display:none; margin-top:4px; }
+  .bundle-panel.active { display:block; }
+
+  .bundle-queue { margin-bottom:12px; }
+  .bundle-item  { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:12px; position:relative; }
+  .bundle-item-app    { font-size:10px; background:rgba(255,255,255,0.07); border-radius:5px; padding:2px 7px; flex-shrink:0; }
+  .bundle-item-sender { color:var(--glow-g); font-weight:600; flex-shrink:0; min-width:50px; }
+  .bundle-item-msg    { color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bundle-item-del    { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:0 2px; flex-shrink:0; }
+  .bundle-item-del:hover { color:#ff6b6b; }
+
+  .btn-add-to-bundle  { width:100%; padding:8px; background:rgba(255,255,255,0.04); border:1px dashed var(--border); border-radius:8px; color:var(--muted); font-size:12px; cursor:pointer; margin-bottom:10px; }
+  .btn-add-to-bundle:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+  .btn-bundle-analyze { width:100%; padding:11px; background:linear-gradient(135deg,#00ffa3,#00d4ff); color:#000; font-weight:700; font-size:13px; border:none; border-radius:10px; cursor:pointer; }
+  .btn-bundle-analyze:hover { opacity:0.9; }
+  .btn-bundle-analyze:disabled { opacity:0.5; cursor:not-allowed; }
+  .bundle-count-badge { font-size:10px; background:var(--glow-g); color:#000; border-radius:99px; padding:1px 7px; margin-left:6px; font-weight:700; }
+
+  /* Bundle result card */
+  .bundle-result-card { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:14px; animation: slideIn 0.35s ease; }
+  .bundle-result-card.send_now { border-color: rgba(0,255,163,0.3); }
+  .bundle-result-card.delay    { border-color: rgba(255,200,0,0.3); }
+  .bundle-result-card.batch    { border-color: rgba(120,120,120,0.3); }
+  .bundle-header  { display:flex; align-items:center; gap:12px; padding:14px 20px; background:rgba(255,255,255,0.02); }
+  .bundle-intent-icon { font-size:26px; }
+  .bundle-meta    { flex:1; }
+  .bundle-sender  { font-size:14px; font-weight:700; color:var(--text); }
+  .bundle-subtitle{ font-size:11px; color:var(--muted); margin-top:2px; }
+  .bundle-score-pill { font-size:13px; font-weight:700; padding:4px 12px; border-radius:99px; background:rgba(255,255,255,0.06); }
+  .bundle-summary { padding:12px 20px 6px; font-size:13px; color:var(--text); line-height:1.6; font-style:italic; }
+  .bundle-sources { padding:6px 20px 12px; }
+  .bundle-source-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:11px; color:var(--muted); }
+  .bundle-source-row:last-child { border-bottom:none; }
+  .bundle-source-app { font-size:10px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px; flex-shrink:0; }
+  .bundle-source-msg { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bundle-fb-row { display:flex; gap:8px; padding:0 20px 14px; align-items:center; }
+
+  /* Popup overlay */
+  .bundle-popup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:1000; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.2s ease; }
+  .bundle-popup { background:var(--card); border:1px solid var(--border); border-radius:20px; width:min(480px,90vw); overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,0.6); animation:popIn 0.3s cubic-bezier(0.16,1,0.3,1); }
+  .bundle-popup-header { padding:20px 24px 14px; display:flex; align-items:flex-start; gap:14px; }
+  .bundle-popup-icon  { font-size:36px; line-height:1; }
+  .bundle-popup-title { font-size:17px; font-weight:700; color:var(--text); }
+  .bundle-popup-sub   { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.5; }
+  .bundle-popup-badge { display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:3px 10px; border-radius:99px; margin-top:8px; font-weight:600; }
+  .bundle-popup-msgs  { padding:0 24px 16px; }
+  .bundle-popup-msg   { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px; color:var(--muted); }
+  .bundle-popup-msg:last-child { border-bottom:none; }
+  .bundle-popup-app   { font-size:10px; background:rgba(255,255,255,0.07); padding:2px 6px; border-radius:4px; flex-shrink:0; }
+  .bundle-popup-actions { display:flex; gap:10px; padding:14px 24px 20px; }
+  .bundle-popup-btn   { flex:1; padding:10px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+  .bundle-popup-btn.dismiss { background:rgba(255,255,255,0.07); color:var(--text); }
+  .bundle-popup-btn.dismiss:hover { background:rgba(255,255,255,0.12); }
+  .bundle-popup-btn.open    { background:linear-gradient(135deg,#00ffa3,#00d4ff); color:#000; }
+  .bundle-popup-btn.open:hover { opacity:0.9; }
+
+  @keyframes popIn { from { transform:scale(0.92) translateY(20px); opacity:0; } to { transform:scale(1) translateY(0); opacity:1; } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+  /* ── Android Setup Page ── */
+  .android-page { display: none; }
+  .android-page.active { display: block; }
+
+  .android-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 700px) { .android-grid { grid-template-columns: 1fr; } }
+
+  .ip-display-box {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 10px; padding: 10px 14px;
+    font-family: var(--font-m); font-size: 13px; color: var(--glow-g);
+    margin-bottom: 10px; word-break: break-all;
+  }
+  .copy-btn-sm {
+    flex-shrink: 0; background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 6px; padding: 3px 9px; color: var(--glow-g);
+    font-size: 10px; cursor: pointer; transition: background 0.2s;
+  }
+  .copy-btn-sm:hover { background: rgba(0,255,163,0.2); }
+
+  .qr-container {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px 0 10px;
+  }
+  #desktop-qr { border-radius: 12px; }
+  #desktop-qr canvas, #desktop-qr img { border-radius: 10px !important; }
+
+  .android-step-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .android-step {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border); border-radius: 12px;
+    font-size: 12px; color: var(--muted); line-height: 1.7;
+  }
+  .android-step-num {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--glow-g); font-weight: 700; margin-top: 1px;
+  }
+  .android-step strong { color: var(--text); }
+
+  .device-counter {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: rgba(0,255,163,0.04);
+    border: 1px solid rgba(0,255,163,0.15); border-radius: 10px;
+    margin-bottom: 12px;
+  }
+
+  .adb-code {
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 12px 14px; font-family: var(--font-m);
+    font-size: 11px; color: var(--glow-g); line-height: 1.9;
+    word-break: break-all; position: relative; margin-bottom: 8px;
+  }
+  .adb-copy { position: absolute; top: 8px; right: 8px;
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 6px; padding: 3px 8px; color: var(--glow-g);
+    font-size: 10px; cursor: pointer; }
+
+  .download-xml-btn {
+    width: 100%; padding: 13px;
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+    border: none; border-radius: 12px;
+    color: #000; font-family: var(--font-h);
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 0.05em; cursor: pointer;
+    transition: all 0.2s; margin-bottom: 8px;
+  }
+  .download-xml-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,255,163,0.35); }
+  .open-app-btn {
+    width: 100%; padding: 13px;
+    background: linear-gradient(90deg, var(--glow-p), var(--glow-b));
+    border: none; border-radius: 12px;
+    color: #fff; font-family: var(--font-h);
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 0.05em; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .open-app-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(180,110,255,0.35); }
+
+</style>
+</head>
+<body>
+
+<div class="mesh"></div>
+
+<div class="app">
+
+  <header>
+    <div class="logo-icon">🧠</div>
+    <div class="logo-text">
+      <h1>NeuralNotify</h1>
+      <p>Context-Aware Notification Intelligence</p>
+    </div>
+    <div class="header-stats">
+      <div class="stat-pill">Total <strong id="hdr-total">0</strong></div>
+      <div class="stat-pill">Sent <strong id="hdr-send" style="color:var(--send)">0</strong></div>
+      <div class="stat-pill">Delayed <strong id="hdr-delay" style="color:var(--delay)">0</strong></div>
+      <div class="stat-pill">Batched <strong id="hdr-batch" style="color:var(--batch)">0</strong></div>
+      <div class="stat-pill">🚫 Spam <strong id="hdr-spam" style="color:#ff6060">0</strong></div>
+    </div>
+  </header>
+
+  <!-- ── Nav Tabs ── -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-analyze" onclick="switchTab('analyze')">⚡ Analyze</button>
+    <button class="nav-tab" id="tab-priorities" onclick="switchTab('priorities')">🎯 My Priorities</button>
+    <button class="nav-tab" id="tab-learning" onclick="switchTab('learning')">🧠 Learning</button>
+    <button class="nav-tab" id="tab-livefeed" onclick="switchTab('livefeed')">📡 Live Feed <span id="ws-badge" style="display:none;background:rgba(0,255,163,.18);color:var(--glow-g);border-radius:99px;font-size:9px;padding:1px 7px;margin-left:4px">LIVE</span></button>
+    <button class="nav-tab" id="tab-android" onclick="switchTab('android')">📱 Android</button>
+  </div>
+
+  <!-- ══════════ LIVE FEED PAGE (real device notifications) ══════════ -->
+  <div id="livefeed-page" style="display:none">
+
+    <!-- Connection status bar -->
+    <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 16px;margin-bottom:18px;flex-wrap:wrap">
+      <div id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2);flex-shrink:0"></div>
+      <span id="ws-status-txt" style="font-size:12px;color:var(--muted)">WebSocket disconnected</span>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="wsConnect()" id="btn-ws-connect"
+          style="border:none;border-radius:8px;cursor:pointer;padding:7px 14px;font-size:12px;background:linear-gradient(90deg,rgba(0,255,163,.7),rgba(0,194,255,.7));color:#000;font-weight:700">
+          Connect WebSocket
+        </button>
+        <button onclick="wsDisconnect()" id="btn-ws-disconnect" style="display:none;border:1px solid rgba(255,96,96,.3);background:rgba(255,96,96,.08);color:#ff7070;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer">
+          Disconnect
+        </button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start" class="lf-grid">
+
+      <!-- Left: real-time feed -->
+      <div>
+        <div class="panel" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="panel-title" style="margin:0">📲 Device Notification Stream</div>
+            <div style="display:flex;gap:6px">
+              <span id="lf-count-badge" style="font-size:10px;background:rgba(0,255,163,.08);border:1px solid rgba(0,255,163,.2);border-radius:99px;padding:2px 9px;color:var(--glow-g)">0 received</span>
+              <button onclick="clearLiveFeed()" style="font-size:11px;padding:4px 10px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:var(--muted);cursor:pointer">Clear</button>
+            </div>
+          </div>
+          <div id="live-feed-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">
+            <div style="text-align:center;padding:32px 16px;color:var(--muted);font-size:12px;line-height:2">
+              <div style="font-size:28px;margin-bottom:8px;opacity:.35">📭</div>
+              Waiting for real device notifications…<br/>
+              <span style="font-size:11px">Connect WebSocket, then set up Tasker (Android) or Shortcuts (iOS) below</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Setup guides -->
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-title">🤖 Android Setup (Tasker)</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.8;margin-bottom:12px">
+            Tasker intercepts every notification on your phone and POSTs it to <code style="font-family:monospace;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;font-size:10px">/push</code> automatically.
+            No root required — just <strong style="color:var(--text)">Notification Access</strong> permission.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,255,163,.1);border:1px solid rgba(0,255,163,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-g);flex-shrink:0">1</div>
+              Install <strong style="color:var(--text)">Tasker</strong> from Play Store → grant Notification Access
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,255,163,.1);border:1px solid rgba(0,255,163,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-g);flex-shrink:0">2</div>
+              Import the <strong style="color:var(--text)">tasker_profile.xml</strong> file (included in this project) into Tasker → Long-press Profiles → Import
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,255,163,.1);border:1px solid rgba(0,255,163,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-g);flex-shrink:0">3</div>
+              Edit the HTTP action URL to your PC's IP: <code id="tasker-url-hint" style="font-family:monospace;background:rgba(0,0,0,.3);padding:2px 6px;border-radius:4px;font-size:10px;color:var(--glow-g)">http://&lt;your-ip&gt;:8000/push</code>
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,255,163,.1);border:1px solid rgba(0,255,163,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-g);flex-shrink:0">4</div>
+              Enable the profile — every notification now flows into NeuralNotify in real time ✅
+            </div>
+          </div>
+          <div style="background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:10px;color:#aaa;line-height:1.9">
+            <span style="color:rgba(255,255,255,.3)">// Tasker sends this JSON on every notification:</span><br/>
+            {<br/>
+            &nbsp;&nbsp;"app": <span style="color:var(--glow-g)">"%entryappname"</span>,<br/>
+            &nbsp;&nbsp;"package": <span style="color:var(--glow-g)">"%entryappname"</span>,<br/>
+            &nbsp;&nbsp;"sender": <span style="color:var(--glow-g)">"%entrytitle"</span>,<br/>
+            &nbsp;&nbsp;"message": <span style="color:var(--glow-g)">"%entrytext"</span>,<br/>
+            &nbsp;&nbsp;"context": { "hour": <span style="color:var(--glow-b)">%TIMEH</span> }<br/>
+            }
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🍎 iOS Setup (Shortcuts)</div>
+          <p style="font-size:11px;color:var(--muted);line-height:1.8;margin-bottom:12px">
+            iOS Shortcuts can run an automation on notification arrival and POST to NeuralNotify.
+            Requires iOS 15+ and Shortcuts app.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-b);flex-shrink:0">1</div>
+              Open <strong style="color:var(--text)">Shortcuts</strong> → Automation tab → + New Automation
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-b);flex-shrink:0">2</div>
+              Choose trigger: <strong style="color:var(--text)">App → When [any app] opens notification</strong>
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-b);flex-shrink:0">3</div>
+              Add action: <strong style="color:var(--text)">Get Contents of URL</strong> → Method: POST → URL: <code id="ios-url-hint" style="font-family:monospace;background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px;font-size:10px;color:var(--glow-b)">http://&lt;your-ip&gt;:8000/push</code>
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-b);flex-shrink:0">4</div>
+              Request body (JSON): <code style="font-family:monospace;background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px;font-size:10px;color:var(--glow-b)">{"app":"Shortcut Variable","sender":"Title","message":"Body"}</code>
+            </div>
+            <div style="display:flex;gap:10px;padding:7px 0;font-size:12px;color:var(--muted)">
+              <div style="width:18px;height:18px;border-radius:50%;background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--glow-b);flex-shrink:0">5</div>
+              Disable "Ask Before Running" → every notification POSTs silently ✅
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: live results panel -->
+      <div>
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-title">⚡ Latest Result</div>
+          <div id="lf-latest-result">
+            <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No results yet</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">📊 Webhook Endpoint</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">POST real notifications directly to:</p>
+          <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.3);border:1px solid rgba(0,255,163,.2);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-family:monospace;font-size:11px;color:var(--glow-g)">
+            <span id="push-endpoint-txt" style="flex:1;word-break:break-all">http://localhost:8000/push</span>
+            <button onclick="copyPushEndpoint()" style="flex-shrink:0;background:rgba(0,255,163,.1);border:1px solid rgba(0,255,163,.2);border-radius:5px;padding:3px 8px;color:var(--glow-g);font-size:10px;cursor:pointer">Copy</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);line-height:1.9">
+            Works with any HTTP client:<br/>
+            • <strong style="color:var(--text)">Tasker</strong> (Android)<br/>
+            • <strong style="color:var(--text)">Shortcuts</strong> (iOS)<br/>
+            • <strong style="color:var(--text)">IFTTT / Zapier / Make</strong><br/>
+            • <strong style="color:var(--text)">curl / Python / any script</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ ANDROID SETUP PAGE ══════════ -->
+  <div class="android-page" id="android-page">
+
+    <!-- Device counter bar -->
+    <div class="device-counter">
+      <div id="and-conn-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)"></div>
+      <span id="and-counter-txt" style="font-size:12px;color:var(--muted);flex:1">Loading device info…</span>
+      <button onclick="loadAndroidPageData()" style="font-size:11px;padding:4px 10px;border-radius:7px;background:rgba(0,255,163,.06);border:1px solid rgba(0,255,163,.15);color:var(--glow-g);cursor:pointer">↻ Refresh</button>
+    </div>
+
+    <div class="android-grid">
+
+      <!-- Left column -->
+      <div>
+        <!-- Server IP + QR -->
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-title">📱 Scan to Open Companion App</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.7">Scan this QR code with your Android phone to open the NeuralNotify companion PWA — it walks you through the full Tasker setup.</p>
+          <div class="qr-container">
+            <div id="desktop-qr" style="background:#fff;padding:10px;border-radius:12px;box-shadow:0 0 0 3px rgba(0,255,163,0.2),0 0 30px rgba(0,255,163,0.1)"></div>
+            <div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center">Open camera → point at QR → tap link</div>
+          </div>
+        </div>
+
+        <!-- Server IP info -->
+        <div class="panel">
+          <div class="panel-title">🌐 Server Address</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Your PC's local IP and port. Phone must be on the same Wi-Fi.</div>
+          <div class="ip-display-box">
+            <span id="and-lan-ip" style="flex:1">Detecting…</span>
+            <button class="copy-btn-sm" onclick="copyAndIP()">Copy</button>
+          </div>
+          <div class="ip-display-box" style="border-color:rgba(0,194,255,0.2);color:var(--glow-b)">
+            <span id="and-push-url" style="flex:1">http://…/push</span>
+            <button class="copy-btn-sm" style="border-color:rgba(0,194,255,0.2);color:var(--glow-b)" onclick="copyPushURL()">Copy</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">
+            🔍 Can't find your IP? Run <code style="font-family:monospace;background:rgba(255,255,255,.06);border-radius:4px;padding:1px 5px">ipconfig</code> in Command Prompt → look for IPv4
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div>
+
+        <!-- Tasker download -->
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-title">🤖 Tasker Auto-Setup</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.7">Download a Tasker XML profile with your server IP <strong style="color:var(--text)">pre-filled</strong>. Import it on your phone — done in 30 seconds.</p>
+          <button class="download-xml-btn" onclick="downloadTaskerXmlDesktop()">
+            📥 Download Tasker XML (Auto-Configured)
+          </button>
+          <button class="open-app-btn" onclick="openAndroidApp()">
+            📱 Open Companion App on This Device
+          </button>
+        </div>
+
+        <!-- Tasker steps -->
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-title">🔧 Tasker Setup Steps</div>
+          <div class="android-step-list">
+            <div class="android-step"><div class="android-step-num">1</div><div>Install <strong>Tasker</strong> from Play Store → open app → grant all permissions</div></div>
+            <div class="android-step"><div class="android-step-num">2</div><div>Go to Android <strong>Settings → Apps → Tasker → Notification Access → Enable</strong></div></div>
+            <div class="android-step"><div class="android-step-num">3</div><div>In Tasker, <strong>Long-press Profiles tab → Import Profile</strong> → select downloaded XML</div></div>
+            <div class="android-step"><div class="android-step-num">4</div><div>Enable the <strong>NeuralNotify Bridge</strong> profile — toggle it ON ✅</div></div>
+            <div class="android-step"><div class="android-step-num">5</div><div>Receive any notification → watch it appear in the <strong>📡 Live Feed</strong> tab above</div></div>
+          </div>
+        </div>
+
+        <!-- ADB bridge (power user) -->
+        <div class="panel">
+          <div class="panel-title">🔌 ADB Bridge (Power Users)</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.7">No Tasker? Use ADB to listen for notifications on the same PC.</p>
+          <div class="adb-code">
+            <button class="adb-copy" onclick="copyAdb(this)">Copy</button>
+            <span id="adb-cmd">adb shell cmd notification listener-check</span>
+          </div>
+          <div class="adb-code">
+            <button class="adb-copy" onclick="copyAdb(this)">Copy</button>
+            python android_bridge.py --server <span id="adb-server-url">http://localhost:8000</span>
+          </div>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.7">The <code style="font-family:monospace;background:rgba(255,255,255,.04);border-radius:3px;padding:1px 4px">android_bridge.py</code> script reads Android notifications over ADB and POSTs them to <code style="font-family:monospace">/push</code>.</p>
+        </div>
+
+      </div>
+    </div><!-- /android-grid -->
+
+    <!-- Context update card (full width) -->
+    <div class="panel" style="margin-top:16px">
+      <div class="panel-title">📍 Current Device Context (from Companion App)</div>
+      <div id="and-ctx-display" style="font-size:12px;color:var(--muted);line-height:2">
+        No context received yet from the companion app.
+      </div>
+    </div>
+
+  </div><!-- /android-page -->
+
+  <!-- ── Priority Settings Page ── -->
+  <div class="priority-page" id="priority-page">
+
+    <div class="settings-grid">
+      <!-- VIP Persons -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot" style="background:var(--glow-g);box-shadow:0 0 8px var(--glow-g)"></span>VIP Persons</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">Notifications from these people always get boosted priority, regardless of app or time.</p>
+        <div class="vip-list" id="vip-list"></div>
+        <div class="add-vip-row">
+          <input type="text" id="vip-name-input" placeholder="Name (e.g. Mom, Boss…)" onkeydown="if(event.key==='Enter')addVIP()" />
+          <select id="vip-app-select">
+            <option value="any">Any App</option>
+            <option value="whatsapp">💬 WhatsApp</option>
+            <option value="gmail">📧 Gmail</option>
+            <option value="slack">💼 Slack</option>
+            <option value="sms">📱 SMS</option>
+            <option value="phone">📞 Phone</option>
+          </select>
+          <button class="btn-add" onclick="addVIP()" title="Add VIP">+</button>
+        </div>
+      </div>
+
+      <!-- App Priorities -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot" style="background:var(--glow-b);box-shadow:0 0 8px var(--glow-b)"></span>App Priority Weights</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">Set how important notifications from each app are to you.</p>
+        <div class="app-priority-list" id="app-priority-list"></div>
+      </div>
+    </div>
+
+    <div class="settings-grid">
+      <!-- Keyword Triggers -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot" style="background:var(--glow-p);box-shadow:0 0 8px var(--glow-p)"></span>Priority Keywords</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6">If a notification contains any of these words, its priority score gets a boost.</p>
+        <div class="keyword-tags" id="keyword-tags"></div>
+        <div class="add-keyword-row">
+          <input type="text" id="keyword-input" placeholder="Add keyword (e.g. deadline, meeting)…" onkeydown="if(event.key==='Enter')addKeyword()" />
+          <button class="btn-add" onclick="addKeyword()" title="Add keyword">+</button>
+        </div>
+      </div>
+
+      <!-- Spam Keywords -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot" style="background:#ff6060;box-shadow:0 0 8px #ff605066"></span>Spam Block Keywords</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">Notifications matching these words are silently blocked — even if they contain urgent-sounding language. Built-in spam patterns (sale, lottery, loan, etc.) always apply.</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <label style="font-size:11px;color:var(--muted)">Spam blocking</label>
+          <div class="toggle-pill" id="spam-toggle" onclick="toggleSpam()" title="Enable/disable spam detection"></div>
+          <span id="spam-toggle-label" style="font-size:11px;color:var(--muted)">Enabled</span>
+        </div>
+        <div class="keyword-tags" id="spam-keyword-tags"></div>
+        <div class="add-keyword-row">
+          <input type="text" id="spam-keyword-input" placeholder="Add spam word (e.g. lottery, sale, loan)…" onkeydown="if(event.key==='Enter')addSpamKeyword()" />
+          <button class="btn-add" onclick="addSpamKeyword()" title="Add spam keyword">+</button>
+        </div>
+      </div>
+
+      <!-- Focus Hours -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot" style="background:var(--delay);box-shadow:0 0 8px var(--delay)"></span>Focus / DND Hours</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6">Mark hours when only critical notifications should break through.</p>
+        <div class="hours-grid" id="hours-grid"></div>
+        <div class="hours-legend">
+          <span><div class="legend-sq" style="background:rgba(249,200,70,0.4)"></div>Focus hour</span>
+          <span><div class="legend-sq" style="background:rgba(255,255,255,0.04);border:1px solid var(--border)"></div>Normal</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-grid full">
+      <!-- Score Thresholds -->
+      <div class="settings-section">
+        <div class="section-title"><span class="dot"></span>Decision Thresholds</div>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">Adjust score cutoffs for when notifications are sent immediately, delayed, or batched together.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <label style="margin:0">Send Now if score ≥</label>
+              <span class="hour-val" id="th-send-val">70%</span>
+            </div>
+            <input type="range" min="50" max="95" value="70" step="5" id="th-send" oninput="updateThresholds()" />
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <label style="margin:0">Delay if score ≥</label>
+              <span class="hour-val" id="th-delay-val" style="border-color:rgba(249,200,70,0.25);background:rgba(249,200,70,0.1);color:var(--delay)">40%</span>
+            </div>
+            <input type="range" min="10" max="70" value="40" step="5" id="th-delay" oninput="updateThresholds()" />
+          </div>
+        </div>
+        <div style="margin-top:18px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:0.08em;text-transform:uppercase">Zone Preview</div>
+          <div class="threshold-visual" id="th-visual"></div>
+          <div class="threshold-labels">
+            <span style="color:var(--batch)">📦 Batch</span>
+            <span style="color:var(--delay)">⏱ Delay</span>
+            <span style="color:var(--send)">🔔 Send Now</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-save-settings" onclick="saveSettings()">💾 Save My Priorities</button>
+    <div class="save-toast" id="save-toast">✅ Priorities saved! They'll now influence all analysis.</div>
+
+  </div><!-- END priority-page -->
+
+  <!-- ══════════════ LEARNING PAGE ══════════════ -->
+  <div class="learning-page" id="learning-page">
+
+    <div style="max-width:680px;margin:0 auto;">
+
+      <!-- Stats row -->
+      <div class="rl-stat-row">
+        <div class="rl-stat">
+          <div class="rl-stat-val" id="rl-total">—</div>
+          <div class="rl-stat-label">Feedback events</div>
+        </div>
+        <div class="rl-stat">
+          <div class="rl-stat-val" id="rl-keys">—</div>
+          <div class="rl-stat-label">Learned patterns</div>
+        </div>
+        <div class="rl-stat">
+          <div class="rl-stat-val" id="rl-net">—</div>
+          <div class="rl-stat-label">Net adjustment range</div>
+        </div>
+      </div>
+
+      <!-- Boosted contexts -->
+      <div class="rl-section">
+        <h3>🔼 Boosted contexts <span style="font-weight:400;color:var(--muted);">(score goes UP)</span></h3>
+        <div id="rl-boosted"><div style="color:var(--muted);font-size:12px;">No boosts learned yet — give 👍 feedback on correct Send Now decisions.</div></div>
+      </div>
+
+      <!-- Suppressed contexts -->
+      <div class="rl-section">
+        <h3>🔽 Suppressed contexts <span style="font-weight:400;color:var(--muted);">(score goes DOWN)</span></h3>
+        <div id="rl-suppressed"><div style="color:var(--muted);font-size:12px;">No suppressions learned yet — give 👎 feedback on wrong decisions.</div></div>
+      </div>
+
+      <!-- Recent feedback log -->
+      <div class="rl-section">
+        <h3>📋 Recent feedback</h3>
+        <div id="rl-log"><div style="color:var(--muted);font-size:12px;">No feedback given yet.</div></div>
+      </div>
+
+      <!-- Reset -->
+      <div class="rl-section" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:600;">Reset learned weights</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">Wipes all learned adjustments. Raw feedback log is kept.</div>
+        </div>
+        <button class="btn-rl-reset" onclick="resetRLWeights()">🗑 Reset Learning</button>
+      </div>
+
+    </div>
+  </div><!-- END learning-page -->
+
+  <div class="grid" id="main-grid">
+
+    <!-- ── LEFT COLUMN ── -->
+    <div>
+
+      <!-- Notification Input -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-title">Notification Input</div>
+
+        <div class="field">
+          <label>App / Source</label>
+          <div class="app-grid" id="app-grid">
+            <div class="app-chip selected" data-app="whatsapp"><span class="emoji">💬</span><span class="name">WhatsApp</span></div>
+            <div class="app-chip" data-app="gmail"><span class="emoji">📧</span><span class="name">Gmail</span></div>
+            <div class="app-chip" data-app="slack"><span class="emoji">💼</span><span class="name">Slack</span></div>
+            <div class="app-chip" data-app="instagram"><span class="emoji">📸</span><span class="name">Instagram</span></div>
+            <div class="app-chip" data-app="twitter"><span class="emoji">🐦</span><span class="name">Twitter</span></div>
+            <div class="app-chip" data-app="youtube"><span class="emoji">▶️</span><span class="name">YouTube</span></div>
+            <div class="app-chip" data-app="sms"><span class="emoji">📱</span><span class="name">SMS</span></div>
+            <div class="app-chip" data-app="phone"><span class="emoji">📞</span><span class="name">Phone</span></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Sender (optional)</label>
+          <input type="text" id="sender" placeholder="e.g. Mom, Dr. Smith, GitHub…" />
+        </div>
+
+        <div class="field">
+          <label>Message / Content</label>
+          <textarea id="message" placeholder="Paste or type the notification message here…"></textarea>
+        </div>
+
+        <button class="btn-analyze" id="btn-analyze" onclick="analyze()">
+          ⚡ Analyze Priority
+        </button>
+        <!-- Bundle Mode Toggle -->
+        <div class="bundle-toggle" onclick="toggleBundleMode()" style="margin-top:14px;">
+          <input type="checkbox" id="bundle-checkbox" onclick="event.stopPropagation();toggleBundleMode()">
+          <span class="bundle-toggle-label">🔗 Bundle Mode</span>
+          <span class="bundle-toggle-sub">Group messages from same sender</span>
+        </div>
+
+        <!-- Bundle Panel -->
+        <div class="bundle-panel" id="bundle-panel">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Add multiple messages below. NeuralNotify will group them by sender &amp; meaning, then give you one smart summary.
+          </div>
+          <div class="bundle-queue" id="bundle-queue"></div>
+          <button class="btn-add-to-bundle" onclick="addToBundleQueue()">+ Add current message to bundle</button>
+          <button class="btn-bundle-analyze" id="btn-bundle-analyze" onclick="analyzeBundle()" disabled>
+            🔗 Analyze Bundle <span class="bundle-count-badge" id="bundle-count">0</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Results area -->
+      <div id="results-area"></div>
+
+    </div>
+
+    <!-- ── RIGHT COLUMN ── -->
+    <div>
+
+      <!-- Context Panel -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-title">Context Override</div>
+
+        <div class="field">
+          <label>Hour of Day <span class="hour-val" id="hour-val">18:00</span></label>
+          <div class="slider-wrap">
+            <input type="range" id="hour" min="0" max="23" value="18"
+              oninput="document.getElementById('hour-val').textContent = String(this.value).padStart(2,'0')+':00'" />
+            <div class="slider-labels"><span>midnight</span><span>noon</span><span>11pm</span></div>
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Location</label>
+            <select id="location">
+              <option value="home">🏠 Home</option>
+              <option value="office">🏢 Office</option>
+              <option value="college">🎓 College</option>
+              <option value="commute">🚌 Commute</option>
+              <option value="gym">🏋️ Gym</option>
+              <option value="outside">🌳 Outside</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Activity</label>
+            <select id="activity">
+              <option value="idle">💤 Idle</option>
+              <option value="working">💻 Working</option>
+              <option value="study">📖 Study</option>
+              <option value="scrolling">📱 Scrolling</option>
+              <option value="sleeping">😴 Sleeping</option>
+              <option value="driving">🚗 Driving</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- Quick presets -->
+        <div class="panel-title" style="margin-bottom:12px">Quick Scenarios</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="fb-btn" onclick="setScenario('urgent-work')">🔥 Urgent Work</button>
+          <button class="fb-btn" onclick="setScenario('late-night')">🌙 Late Night</button>
+          <button class="fb-btn" onclick="setScenario('weekend')">☀️ Weekend Chill</button>
+          <button class="fb-btn" onclick="setScenario('commute')">🚌 Commuting</button>
+        </div>
+
+        <div class="sep"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:11px;font-weight:600;">ML Model</div>
+            <div style="font-size:10px;color:var(--muted);" id="model-status">GradientBoosting · ready</div>
+          </div>
+          <button class="fb-btn" onclick="retrainModel()" id="btn-retrain">↺ Retrain</button>
+        </div>
+      </div>
+
+      <!-- Stats Panel -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-title">Decision Distribution</div>
+        <div class="donut-wrap" id="donut-wrap">
+          <div class="empty"><div class="icon">📊</div>Analyze some notifications first</div>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="panel">
+        <div class="panel-title">Recent History</div>
+        <div class="history-list" id="history-list">
+          <div class="empty"><div class="icon">🕐</div>No history yet</div>
+        </div>
+        <div style="margin-top:12px;text-align:right">
+          <button class="fb-btn" onclick="resetStats()">↺ Reset</button>
+        </div>
+      </div>
+
+      <!-- Scheduled Queue Panel -->
+      <div class="panel">
+        <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>⏰ Scheduled Queue</span>
+          <span id="sched-status-label" style="font-size:10px;color:var(--muted);font-weight:400"></span>
+        </div>
+        <div id="sched-queue-list">
+          <div class="empty"><div class="icon">🕐</div>No pending notifications</div>
+        </div>
+      </div>
+
+      <!-- Spam Log Panel -->
+      <div class="panel">
+        <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>🚫 Spam Blocked</span>
+          <button class="fb-btn" onclick="clearSpamLog()" style="font-size:10px">Clear</button>
+        </div>
+        <div id="spam-log-list">
+          <div class="empty"><div class="icon">✅</div>No spam blocked yet</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  const API = '';   // same origin — FastAPI serves both API and static
+  let selectedApp = 'whatsapp';
+
+  // App chip selection
+  document.querySelectorAll('.app-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.app-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      selectedApp = chip.dataset.app;
+    });
+  });
+
+  // ── Quick scenarios ──
+  function setScenario(s) {
+    const scenarios = {
+      'urgent-work': { hour: 10, location: 'office', activity: 'working',
+        app: 'slack', msg: 'URGENT: Production is down! All hands needed immediately. Deadline alert!' },
+      'late-night': { hour: 2, location: 'home', activity: 'sleeping',
+        app: 'instagram', msg: '🔥 Your post is blowing up! 250 new likes' },
+      'weekend': { hour: 14, location: 'home', activity: 'scrolling',
+        app: 'youtube', msg: 'New video from your favorite channel!' },
+      'commute': { hour: 8, location: 'commute', activity: 'idle',
+        app: 'gmail', msg: 'URGENT: Project deadline moved to today. Need your report ASAP!' }
+    };
+    const sc = scenarios[s];
+    if (!sc) return;
+    document.getElementById('hour').value = sc.hour;
+    document.getElementById('hour-val').textContent = String(sc.hour).padStart(2,'0') + ':00';
+    document.getElementById('location').value = sc.location;
+    document.getElementById('activity').value = sc.activity;
+    document.getElementById('message').value = sc.msg;
+    document.querySelectorAll('.app-chip').forEach(c => {
+      c.classList.toggle('selected', c.dataset.app === sc.app);
+    });
+    selectedApp = sc.app;
+  }
+
+  // ── Analyze ──
+  async function analyze() {
+    const message  = document.getElementById('message').value.trim();
+    const sender   = document.getElementById('sender').value.trim();
+    const hour     = parseInt(document.getElementById('hour').value) || new Date().getHours();
+    const location = document.getElementById('location').value || 'home';
+    const activity = document.getElementById('activity').value || 'idle';
+
+    const btn = document.getElementById('btn-analyze');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+
+    const payload = {
+      app:     selectedApp || 'whatsapp',
+      sender:  sender  || 'Unknown',
+      message: message || '(no message)',
+      context: { hour, location, activity }
+    };
+
+    let serverOk = false;
+    try {
+      const res = await fetch(API + '/notify', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data   = await res.json();
+        const result = data.result && data.result[0];
+        if (result && typeof result.score === 'number') {
+          result.score  = applyPriorities(payload, result.score);
+          result.action = result.score >= priorities.thresholdSend  / 100 ? 'send_now'
+                        : result.score >= priorities.thresholdDelay / 100 ? 'delay' : 'batch';
+          showResult(result, payload);
+          serverOk = true;
+          try { await loadStats(); } catch(_) {}
+        }
+      }
+    } catch (_) {}
+
+    if (!serverOk) {
+      try {
+        let score    = computeLocalScore(payload);
+        score        = applyPriorities(payload, score);
+        const action = score >= priorities.thresholdSend  / 100 ? 'send_now'
+                     : score >= priorities.thresholdDelay / 100 ? 'delay' : 'batch';
+        showResult({
+          summary: message || '(no message)',
+          score, action,
+          context: { hour, location, activity, app_type: selectedApp }
+        }, payload);
+      } catch (err) {
+        const area = document.getElementById('results-area');
+        const errDiv = document.createElement('div');
+        errDiv.style.cssText = 'padding:16px;color:#ff6b6b;background:rgba(255,100,100,0.08);border:1px solid rgba(255,100,100,0.2);border-radius:12px;font-size:13px;margin-bottom:12px;';
+        errDiv.innerHTML = '⚠️ Error: ' + err.message + '<br><small style="color:var(--muted);">Open browser console (F12) for details.</small>';
+        area.insertBefore(errDiv, area.firstChild);
+      }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '⚡ Analyze Priority';
+  }
+
+  // Local fallback scoring (mirrors backend logic)
+  function computeLocalScore(payload) {
+    const { hour, location, activity } = payload.context;
+    const msg = (payload.message || '').toLowerCase();
+    const urgentKws = ['urgent','asap','immediately','emergency','deadline','critical','important','help','now','alert','warning','fail'];
+    const urgency = urgentKws.reduce((s, k) => s + (msg.includes(k) ? 1 : 0), 0);
+    const app = payload.app;
+    const isNight = hour >= 22 || hour < 6;
+    const isWork = hour >= 9 && hour < 18;
+    const socialApps = ['instagram','twitter','youtube'];
+    const workApps   = ['gmail','slack'];
+    const personalApps = ['whatsapp','sms','phone'];
+
+    // Is this a personal notification (from a person) or a work/system one?
+    const isPersonal = personalApps.includes(app);
+
+    // Location modifiers — context-aware, not one-size-fits-all:
+    // Personal msgs: home = you're free, office = you're busy (suppress).
+    // Work msgs:     office = relevant, home = less so.
+    const locationScore = isPersonal
+      ? { home: +0.15, outside: +0.05, commute:  0.00, gym: -0.05, college: -0.08, office: -0.15 }
+      : { office: +0.15, college: +0.10, commute: +0.05, home: 0.00, outside: -0.05, gym: -0.10 };
+
+    // Activity modifiers — context-aware:
+    // Personal msgs: idle/scrolling = free to respond; working = busy (suppress).
+    // Work msgs:     working = relevant; sleeping = suppress.
+    const activityScore = isPersonal
+      ? { idle: +0.12, scrolling: +0.08, study: -0.05, driving: -0.08, working: -0.12, sleeping: -0.20 }
+      : { working: +0.12, driving: +0.10, study: +0.08, idle: 0.00, scrolling: -0.08, sleeping: -0.20 };
+
+    let score = 0.3;
+    if (urgency > 0) score += 0.15 * Math.min(urgency, 3);
+    if (isWork && !isNight) score += 0.2;
+    if (isNight) score -= 0.35;
+    if (socialApps.includes(app)) score -= 0.25;
+    if (workApps.includes(app)) score += 0.15;
+    if (msg.includes('?')) score += 0.05;
+    if (msg.includes('!')) score += 0.05;
+
+    // Apply context-aware location and activity modifiers
+    score += (locationScore[location] ?? 0);
+    score += (activityScore[activity] ?? 0);
+
+    return Math.max(0, Math.min(1, score));
+  }
+
+  // ── Show result ──
+  function showResult(result, payload) {
+    const area = document.getElementById('results-area');
+    const { action, score, summary, context } = result;
+
+    const actionLabels = { send_now: '🔔 Send Now', delay: '⏱ Delay', batch: '📦 Batch', spam: '🚫 Spam Blocked' };
+    const scoreColors  = { send_now: 'var(--send)', delay: 'var(--delay)', batch: 'var(--batch)', spam: '#ff6060' };
+
+    const pct = Math.round(score * 100);
+    const circ = 2 * Math.PI * 22;
+    const offset = circ - (pct / 100) * circ;
+    const col = scoreColors[action];
+    const cardId = 'card-' + Date.now();
+
+    // Detect priority influences for badges
+    const msg = (payload.message || '').toLowerCase();
+    const sender = (payload.sender || '').toLowerCase();
+    const hour = payload.context?.hour ?? new Date().getHours();
+    const influences = [];
+    const isVIP = priorities.vipPersons.some(v => {
+      return sender.includes(v.name.toLowerCase()) && (v.app === 'any' || v.app === payload.app);
+    });
+    if (isVIP) influences.push({ icon: '⭐', label: 'VIP Sender', color: 'var(--glow-g)' });
+    const matchedKws = priorities.keywords.filter(kw => msg.includes(kw.toLowerCase()));
+    if (matchedKws.length) influences.push({ icon: '🔑', label: `Keyword: ${matchedKws[0]}`, color: 'var(--glow-p)' });
+    if (priorities.focusHours.includes(hour)) influences.push({ icon: '🎯', label: 'Focus Hour', color: 'var(--delay)' });
+    const appW = priorities.appWeights[payload.app] ?? 50;
+    if (appW >= 75) influences.push({ icon: '📌', label: 'High-priority app', color: 'var(--glow-b)' });
+    else if (appW <= 25) influences.push({ icon: '🔇', label: 'Low-priority app', color: 'var(--batch)' });
+
+    const influenceBadges = influences.map(inf =>
+      `<div class="ctx-tag" style="border-color:${inf.color}22;color:${inf.color}">${inf.icon} <span style="color:${inf.color}">${inf.label}</span></div>`
+    ).join('');
+
+    const card = document.createElement('div');
+    card.className = `result-card ${action}`;
+    card.innerHTML = `
+      <div class="result-header" data-card-id="${cardId}">
+        <div class="score-ring">
+          <svg width="56" height="56" viewBox="0 0 56 56">
+            <circle class="track" cx="28" cy="28" r="22" />
+            <circle class="arc" cx="28" cy="28" r="22"
+              stroke="${col}"
+              stroke-dasharray="${circ}"
+              stroke-dashoffset="${offset}" />
+          </svg>
+          <div class="score-val" style="color:${col}">${pct}%</div>
+        </div>
+        <div class="result-summary">${escapeHtml(summary)}</div>
+        <div class="action-badge">${actionLabels[action]}</div>
+      </div>
+      <div class="result-body">
+        <div class="ctx-tag">📱 <span>${payload.app}</span></div>
+        <div class="ctx-tag">🕐 <span>${String(context?.hour ?? '?').padStart(2,'0')}:00</span></div>
+        <div class="ctx-tag">📍 <span>${context?.location ?? '?'}</span></div>
+        <div class="ctx-tag">⚡ <span>${context?.activity ?? '?'}</span></div>
+        ${influenceBadges}
+      </div>
+      <div class="feedback-row" id="fb-row-${cardId}">
+        <span style="font-size:10px;color:var(--muted);margin-right:4px;">Feedback:</span>
+        <button class="fb-btn" onclick="sendFeedback(this,'correct','${action}','${cardId}')">👍 Correct</button>
+        <button class="fb-btn" onclick="sendFeedback(this,'wrong','${action}','${cardId}')">👎 Wrong</button>
+      </div>
+    `;
+
+    area.insertBefore(card, area.firstChild);
+
+    // Store rich context on card for RL feedback
+    card.dataset.rlCtx = JSON.stringify({
+      app:      payload.app,
+      location: context?.location ?? '',
+      activity: context?.activity ?? '',
+      hour:     context?.hour ?? new Date().getHours(),
+      sender:   payload.sender ?? '',
+    });
+    card.dataset.rlScore  = String(result?.score ?? score ?? 0.5);
+    card.dataset.cardId   = cardId;
+
+    // Animate ring
+    setTimeout(() => {
+      const arc = card.querySelector('.arc');
+      arc.style.strokeDashoffset = offset;
+    }, 50);
+  }
+
+  // ── Load & render stats ──
+  async function loadStats() {
+    let stats;
+    try {
+      const res = await fetch(API + '/stats');
+      stats = await res.json();
+    } catch(e) { return; }
+
+    document.getElementById('hdr-total').textContent = stats.total || 0;
+    document.getElementById('hdr-send').textContent  = stats.send_now || 0;
+    document.getElementById('hdr-delay').textContent = stats.delay    || 0;
+    document.getElementById('hdr-batch').textContent = stats.batch    || 0;
+    const spamEl = document.getElementById('hdr-spam');
+    if (spamEl) spamEl.textContent = stats.spam || 0;
+
+    renderDonut(stats);
+    renderHistory(stats.history || []);
+  }
+
+  function renderDonut(stats) {
+    const wrap = document.getElementById('donut-wrap');
+    const total = stats.total || 0;
+    if (!total) return;
+
+    const send = stats.send_now || 0;
+    const delay = stats.delay || 0;
+    const batch = stats.batch || 0;
+
+    const r = 36, cx = 44, cy = 44;
+    const circ = 2 * Math.PI * r;
+
+    function slice(val, offset, color) {
+      const pct = val / total;
+      const len = pct * circ;
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+        stroke="${color}" stroke-width="10"
+        stroke-dasharray="${len} ${circ - len}"
+        stroke-dashoffset="${-offset}" />`;
+    }
+
+    const o1 = 0;
+    const o2 = (send / total) * circ;
+    const o3 = o2 + (delay / total) * circ;
+
+    wrap.innerHTML = `
+      <svg width="88" height="88" viewBox="0 0 88 88" style="transform:rotate(-90deg);flex-shrink:0">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="10"/>
+        ${slice(send, o1, 'var(--send)')}
+        ${slice(delay, o2, 'var(--delay)')}
+        ${slice(batch, o3, 'var(--batch)')}
+      </svg>
+      <div class="donut-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--send)"></div>Send Now <strong style="color:var(--send);margin-left:4px">${send}</strong></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--delay)"></div>Delay <strong style="color:var(--delay);margin-left:4px">${delay}</strong></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--batch)"></div>Batch <strong style="color:var(--batch);margin-left:4px">${batch}</strong></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Total: ${total}</div>
+      </div>
+    `;
+  }
+
+  function renderHistory(history) {
+    const list = document.getElementById('history-list');
+    if (!history || !history.length) {
+      list.innerHTML = '<div class="empty"><div class="icon">⏰</div>No history yet</div>';
+      return;
+    }
+    const AC = { send_now:'var(--send)', delay:'var(--delay)', batch:'var(--batch)', spam:'#ff6060' };
+    list.innerHTML = [...history].reverse().slice(0, 15).map(function(h) {
+      var col  = AC[h.action] || 'var(--muted)';
+      var pct  = Math.round((h.score || 0) * 100);
+      var badge = (h.count && h.count > 1)
+        ? '<span style="font-size:9px;background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;margin-left:4px;">📦' + h.count + '</span>'
+        : '';
+      var spamBadge = h.spam
+        ? '<span style="font-size:9px;background:rgba(255,96,96,0.15);color:#ff9090;padding:1px 5px;border-radius:4px;margin-left:4px;border:1px solid rgba(255,96,96,0.3)">🚫 spam</span>'
+        : '';
+      var sndr = h.sender
+        ? '<span style="color:var(--glow-g);font-size:10px;font-weight:600;">' + escapeHtml(h.sender) + '</span> • '
+        : '';
+      return '<div class="history-item">'
+        + '<div class="h-dot ' + h.action + '"></div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:10px;color:var(--muted);margin-bottom:2px;">' + sndr + escapeHtml(h.app || '?') + badge + spamBadge + '</div>'
+        + '<div class="h-summary" style="font-size:11px;">' + escapeHtml((h.summary || '').slice(0,80)) + '</div>'
+        + '</div>'
+        + '<div style="text-align:right;flex-shrink:0;">'
+        + (h.action === 'spam'
+            ? '<div style="font-size:12px;font-weight:700;color:#ff6060;">SPAM</div>'
+            : '<div style="font-size:12px;font-weight:700;color:' + col + ';">' + pct + '%</div>')
+        + '<div style="font-size:9px;color:var(--muted);">' + (h.action||'').replace('_',' ') + '</div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // ── Feedback ──
+  async function sendFeedback(btn, verdict, action, cardId) {
+    btn.classList.add('active');
+    // Disable both buttons on this card
+    const row = document.getElementById('fb-row-' + cardId);
+    if (row) row.querySelectorAll('.fb-btn').forEach(b => b.disabled = true);
+
+    // Find the card to read stored RL context
+    const card = document.querySelector('[data-card-id="' + cardId + '"]')?.closest('.result-card');
+    const rlCtx   = card ? JSON.parse(card.dataset.rlCtx  || '{}') : {};
+    const rlScore = card ? parseFloat(card.dataset.rlScore || '0.5') : 0.5;
+
+    try {
+      const res = await fetch(API + '/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verdict, action,
+          score:   rlScore,
+          context: rlCtx,
+          ts:      Date.now()
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const rl = data.rl || {};
+        // Show a small RL badge to confirm learning happened
+        if (row && rl.weights_updated && rl.weights_updated.length > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'rl-badge';
+          badge.title = 'Learned from: ' + rl.weights_updated.join(', ');
+          badge.innerHTML = '🧠 Learned';
+          row.appendChild(badge);
+        }
+      }
+    } catch(e) {
+      // Offline — store feedback locally for next sync
+      const pending = JSON.parse(localStorage.getItem('nn_pending_fb') || '[]');
+      pending.push({ verdict, action, score: rlScore, context: rlCtx, ts: Date.now() });
+      localStorage.setItem('nn_pending_fb', JSON.stringify(pending.slice(-50)));
+    }
+  }
+
+  // Retry any pending offline feedback when server is reachable
+  // ── RL Learning Dashboard ──────────────────────────────────────────────
+  async function loadRLSummary() {
+    try {
+      const res = await fetch(API + '/rl/summary');
+      if (!res.ok) throw new Error('no server');
+      const d = await res.json();
+
+      document.getElementById('rl-total').textContent = d.total_feedback_entries ?? 0;
+      document.getElementById('rl-keys').textContent  = d.total_weight_keys ?? 0;
+
+      // Compute net adjustment range from raw weights
+      const vals = Object.values(d.raw_weights || {});
+      if (vals.length) {
+        const mn = Math.min(...vals), mx = Math.max(...vals);
+        document.getElementById('rl-net').textContent =
+          (mn >= 0 ? '+' : '') + Math.round(mn*100) + '% to +' + Math.round(mx*100) + '%';
+      } else {
+        document.getElementById('rl-net').textContent = '0%';
+      }
+
+      renderWeightBars('rl-boosted',    d.most_boosted    || [], true);
+      renderWeightBars('rl-suppressed', d.most_suppressed || [], false);
+      renderFeedbackLog(d);
+    } catch(e) {
+      document.getElementById('rl-total').textContent = 'offline';
+    }
+  }
+
+  function renderWeightBars(elId, items, positive) {
+    const el = document.getElementById(elId);
+    if (!items.length) {
+      el.innerHTML = positive
+        ? '<div style="color:var(--muted);font-size:12px;">No boosts learned yet — give 👍 on correct Send Now decisions.</div>'
+        : '<div style="color:var(--muted);font-size:12px;">No suppressions learned yet — give 👎 on wrong decisions.</div>';
+      return;
+    }
+    const maxAbs = Math.max(...items.map(i => Math.abs(i.weight)), 0.01);
+    el.innerHTML = items.map(item => {
+      const pct   = Math.round(Math.abs(item.weight) / maxAbs * 100);
+      const color = positive ? 'var(--glow-g)' : '#ff6b6b';
+      const sign  = item.weight >= 0 ? '+' : '';
+      const label = item.key
+        .replace(/[+]/g, ' & ')
+        .replace(/(\w+):(\S+)/g, function(_, dim, val) {
+          return dim.charAt(0).toUpperCase() + dim.slice(1).replace(/_/g,' ')
+            + ': ' + val.charAt(0).toUpperCase() + val.slice(1).replace(/_/g,' ');
+        });
+      return '<div class="weight-bar-wrap">'
+        + '<div class="weight-key" title="' + item.key + '">' + label + '</div>'
+        + '<div class="weight-bar-track">'
+        + '<div class="weight-bar-fill" style="width:' + pct + '%;background:' + color + ';"></div>'
+        + '</div>'
+        + '<div class="weight-val" style="color:' + color + ';">' + sign + Math.round(item.weight*100) + '%</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function renderFeedbackLog(d) {
+    const el = document.getElementById('rl-log');
+    const total = d.total_feedback_entries || 0;
+    const keys  = d.total_weight_keys || 0;
+    if (!total) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No feedback given yet.</div>';
+      return;
+    }
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);line-height:1.8;">'
+      + '<b style="color:var(--text)">' + total + '</b> feedback events recorded across '
+      + '<b style="color:var(--text)">' + keys + '</b> distinct context patterns.<br>'
+      + 'The system is continuously adjusting scores based on your preferences.<br>'
+      + '<span style="font-size:11px;">Weights stored in <code>data/logs/rl_weights.json</code> — persist across restarts.</span>'
+      + '</div>';
+  }
+
+  async function resetRLWeights() {
+    if (!confirm('Reset all learned weights? This cannot be undone.')) return;
+    try {
+      await fetch(API + '/rl/reset', { method: 'DELETE' });
+      loadRLSummary();
+    } catch(e) { alert('Could not reach server.'); }
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════
+  //  BUNDLE MODE
+  // ══════════════════════════════════════════════════════════════════
+
+  let bundleQueue  = [];   // [{app, sender, message}]
+  let bundleActive = false;
+
+  const INTENT_ICONS = {
+    call_back: '📞', urgent: '🚨', question: '❓',
+    meeting: '📅', location: '📍', greeting: '👋', info: '💬'
+  };
+  const ACTION_COLORS = {
+    send_now: 'var(--send)', delay: 'var(--delay)', batch: 'var(--batch)'
+  };
+  const APP_EMOJIS = {
+    whatsapp:'💬', gmail:'📧', slack:'💼', instagram:'📸',
+    twitter:'🐦', youtube:'▶️', sms:'📱', phone:'📞'
+  };
+
+  function toggleBundleMode() {
+    bundleActive = !bundleActive;
+    document.getElementById('bundle-checkbox').checked = bundleActive;
+    document.getElementById('bundle-panel').classList.toggle('active', bundleActive);
+  }
+
+  function addToBundleQueue() {
+    const message = document.getElementById('message').value.trim();
+    const sender  = document.getElementById('sender').value.trim() || 'Unknown';
+    if (!message) { alert('Please enter a message first.'); return; }
+
+    bundleQueue.push({ app: selectedApp, sender, message });
+    renderBundleQueue();
+
+    // Clear message field for next input
+    document.getElementById('message').value = '';
+  }
+
+  function removeFromBundle(idx) {
+    bundleQueue.splice(idx, 1);
+    renderBundleQueue();
+  }
+
+  function renderBundleQueue() {
+    const el    = document.getElementById('bundle-queue');
+    const count = document.getElementById('bundle-count');
+    const btn   = document.getElementById('btn-bundle-analyze');
+
+    count.textContent = bundleQueue.length;
+    btn.disabled = bundleQueue.length < 1;
+
+    if (!bundleQueue.length) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = bundleQueue.map((item, i) =>
+      '<div class="bundle-item">'
+      + '<span class="bundle-item-app">' + (APP_EMOJIS[item.app] || '📲') + ' ' + item.app + '</span>'
+      + '<span class="bundle-item-sender">' + escapeHtml(item.sender) + '</span>'
+      + '<span class="bundle-item-msg">' + escapeHtml(item.message) + '</span>'
+      + '<button class="bundle-item-del" onclick="removeFromBundle(' + i + ')">✕</button>'
+      + '</div>'
+    ).join('');
+  }
+
+  async function analyzeBundle() {
+    if (!bundleQueue.length) return;
+    const btn = document.getElementById('btn-bundle-analyze');
+    btn.disabled = true;
+    btn.textContent = 'Grouping…';
+
+    const hour     = parseInt(document.getElementById('hour').value);
+    const location = document.getElementById('location').value;
+    const activity = document.getElementById('activity').value;
+
+    // Append context as last element (backend strips it out)
+    const payload = [...bundleQueue, { __context__: { hour, location, activity } }];
+
+    try {
+      const res = await fetch(API + '/bundle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
+      showBundleResults(data.bundles, { hour, location, activity });
+      await loadStats();
+    } catch(e) {
+      // Offline fallback — do local grouping by sender
+      const localBundles = localGroupBundle(bundleQueue, { hour, location, activity });
+      showBundleResults(localBundles, { hour, location, activity });
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '🔗 Analyze Bundle <span class="bundle-count-badge" id="bundle-count">' + bundleQueue.length + '</span>';
+  }
+
+  function localGroupBundle(items, ctx) {
+    // Simple local grouping: same sender → same bundle
+    const groups = {};
+    items.forEach(item => {
+      const key = (item.sender || 'Unknown').toLowerCase() + '|' + item.app;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.values(groups).map(group => {
+      const sender  = group[0].sender || 'Unknown';
+      const app     = group[0].app;
+      const msgs    = group.map(g => g.message);
+      const combined = msgs.join(' ');
+      const intent  = detectIntentLocal(combined);
+      const count   = group.length;
+
+      let summary;
+      if (count === 1) {
+        summary = msgs[0];
+      } else {
+        const intentPhrase = { call_back:'wants you to call back', urgent:'sent an urgent message',
+          question:'is asking you something', meeting:'mentioned a meeting',
+          location:'shared a location', greeting:'sent you a greeting', info:'sent you a message' }[intent] || 'sent you a message';
+        summary = sender + ' ' + intentPhrase + '  •  [' + app + ' · ' + count + ' messages]';
+      }
+
+      let score = 0.35;
+      if (intent === 'urgent')    score += 0.3;
+      if (intent === 'call_back') score += 0.2;
+      if (intent === 'question')  score += 0.1;
+      score = applyPriorities({ app, sender, message: combined, context: ctx }, score);
+      const action = score >= priorities.thresholdSend/100 ? 'send_now'
+                   : score >= priorities.thresholdDelay/100 ? 'delay' : 'batch';
+
+      return { summary, score, action, count, intent, apps:[app], sender, sources: group,
+               cross_app: false, context: ctx };
+    });
+  }
+
+  function detectIntentLocal(text) {
+    const t = text.toLowerCase();
+    if (/\bcall\b|\bring\b|\bphone\b/.test(t))      return 'call_back';
+    if (/\burgent\b|\basap\b|\bemergency\b/.test(t)) return 'urgent';
+    if (/\?/.test(t))                                      return 'question';
+    if (/\bmeeting\b|\bschedule\b/.test(t))           return 'meeting';
+    if (/\bhello\b|\bhi\b|\bhey\b/.test(t))         return 'greeting';
+    return 'info';
+  }
+
+  function showBundleResults(bundles, ctx) {
+    // Show popup for the highest-priority bundle first
+    if (!bundles.length) return;
+    const top = bundles.slice().sort((a,b) => b.score - a.score)[0];
+    showBundlePopup(top);
+
+    // Also add all bundles to results area
+    bundles.forEach(b => addBundleCard(b));
+  }
+
+  function showBundlePopup(bundle) {
+    const existing = document.getElementById('bundle-popup-overlay');
+    if (existing) existing.remove();
+
+    const icon      = INTENT_ICONS[bundle.intent] || '💬';
+    const col       = ACTION_COLORS[bundle.action] || 'var(--muted)';
+    const pct       = Math.round(bundle.score * 100);
+    const actionLbl = { send_now:'🔔 Send Now', delay:'⏱ Delay', batch:'📦 Batch' }[bundle.action] || bundle.action;
+    const appsLbl   = (bundle.apps || []).map(a => (APP_EMOJIS[a] || '') + ' ' + a).join(' & ');
+
+    const msgsHtml = (bundle.sources || []).map(s =>
+      '<div class="bundle-popup-msg">'
+      + '<span class="bundle-popup-app">' + (APP_EMOJIS[s.app] || '📲') + ' ' + s.app + '</span>'
+      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(s.message || '') + '</span>'
+      + '</div>'
+    ).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bundle-popup-overlay';
+    overlay.className = 'bundle-popup-overlay';
+    overlay.innerHTML =
+      '<div class="bundle-popup">'
+      + '<div class="bundle-popup-header">'
+      +   '<div class="bundle-popup-icon">' + icon + '</div>'
+      +   '<div style="flex:1;">'
+      +     '<div class="bundle-popup-title">' + escapeHtml(bundle.sender || 'Unknown') + '</div>'
+      +     '<div class="bundle-popup-sub">' + escapeHtml(bundle.summary || '') + '</div>'
+      +     '<span class="bundle-popup-badge" style="background:' + col + '22;color:' + col + ';">'
+      +       actionLbl + ' &nbsp;·&nbsp; ' + pct + '%'
+      +     '</span>'
+      +   '</div>'
+      + '</div>'
+      + '<div style="padding:0 24px 6px;font-size:11px;color:var(--muted);">'
+      +   bundle.count + ' message' + (bundle.count !== 1 ? 's' : '') + ' from ' + appsLbl
+      + '</div>'
+      + '<div class="bundle-popup-msgs">' + msgsHtml + '</div>'
+      + '<div class="bundle-popup-actions">'
+      +   '<button class="bundle-popup-btn dismiss" onclick="document.getElementById(&quot;bundle-popup-overlay&quot;).remove()">Dismiss</button>'
+      + '</div>'
+      + '</div>';
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
+
+  function addBundleCard(bundle) {
+    const area    = document.getElementById('results-area');
+    const icon    = INTENT_ICONS[bundle.intent] || '💬';
+    const col     = ACTION_COLORS[bundle.action] || 'var(--muted)';
+    const pct     = Math.round(bundle.score * 100);
+    const cardId  = 'card-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+    const actionLbl = { send_now:'🔔 Send Now', delay:'⏱ Delay', batch:'📦 Batch' }[bundle.action] || bundle.action;
+
+    const sourcesHtml = (bundle.sources || []).map(s =>
+      '<div class="bundle-source-row">'
+      + '<span class="bundle-source-app">' + (APP_EMOJIS[s.app]||'📲') + ' ' + s.app + '</span>'
+      + '<span class="bundle-source-msg">' + escapeHtml(s.message || '') + '</span>'
+      + '</div>'
+    ).join('');
+
+    const card = document.createElement('div');
+    card.className = 'bundle-result-card ' + bundle.action;
+    card.dataset.rlCtx = JSON.stringify({
+      app: bundle.apps && bundle.apps[0] || 'other',
+      location: (bundle.context || {}).location || '',
+      activity: (bundle.context || {}).activity || '',
+      hour:     (bundle.context || {}).hour || 12,
+      sender:   bundle.sender || '',
+    });
+    card.dataset.rlScore = String(bundle.score);
+
+    card.innerHTML =
+      '<div class="bundle-header">'
+      + '<div class="bundle-intent-icon">' + icon + '</div>'
+      + '<div class="bundle-meta">'
+      +   '<div class="bundle-sender">' + escapeHtml(bundle.sender || 'Unknown')
+      +     (bundle.cross_app ? ' <span style="font-size:10px;color:var(--muted);font-weight:400;">(cross-app)</span>' : '') + '</div>'
+      +   '<div class="bundle-subtitle">' + bundle.count + ' message' + (bundle.count!==1?'s':'') + '  ·  ' + (bundle.apps||[]).join(' & ') + '</div>'
+      + '</div>'
+      + '<div class="bundle-score-pill" style="color:' + col + ';">' + pct + '%<br><span style="font-size:9px;font-weight:400;">' + actionLbl + '</span></div>'
+      + '</div>'
+      + '<div class="bundle-summary">' + escapeHtml(bundle.summary || '') + '</div>'
+      + '<div class="bundle-sources">' + sourcesHtml + '</div>'
+      + '<div class="bundle-fb-row" id="fb-row-' + cardId + '">'
+      +   '<span style="font-size:10px;color:var(--muted);">Feedback:</span>'
+      +   '<button class="fb-btn" onclick="sendFeedback(this,&apos;correct&apos;,&apos;' + bundle.action + '&apos;,&apos;' + cardId + '&apos;)">👍 Correct</button>'
+      +   '<button class="fb-btn" onclick="sendFeedback(this,&apos;wrong&apos;,&apos;' + bundle.action + '&apos;,&apos;' + cardId + '&apos;)">👎 Wrong</button>'
+      + '</div>';
+
+    // Patch dataset so sendFeedback can read cardId
+    card.querySelector('.bundle-fb-row').closest('.bundle-result-card').dataset.cardId = cardId;
+    card.querySelector('[data-card-id]') || (card.dataset.cardId = cardId);
+
+    area.insertBefore(card, area.firstChild);
+  }
+
+  async function retrainModel() {
+    const btn = document.getElementById('btn-retrain');
+    const status = document.getElementById('model-status');
+    btn.disabled = true;
+    btn.textContent = 'Retraining…';
+    status.textContent = 'Training in progress…';
+    try {
+      const res = await fetch(API + '/retrain', { method: 'POST' });
+      if (res.ok) {
+        status.textContent = 'Retrained ✓';
+        status.style.color = 'var(--glow-g)';
+        setTimeout(function() { status.textContent = 'GradientBoosting · ready'; status.style.color = ''; }, 3000);
+      } else { status.textContent = 'Retrain failed'; status.style.color = '#ff6b6b'; }
+    } catch(e) { status.textContent = 'Server offline'; status.style.color = '#ff6b6b'; }
+    btn.disabled = false;
+    btn.textContent = '↺ Retrain';
+  }
+
+  async function flushPendingFeedback() {
+    const pending = JSON.parse(localStorage.getItem('nn_pending_fb') || '[]');
+    if (!pending.length) return;
+    const remaining = [];
+    for (const entry of pending) {
+      try {
+        const res = await fetch(API + '/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        });
+        if (!res.ok) remaining.push(entry);
+      } catch { remaining.push(entry); }
+    }
+    localStorage.setItem('nn_pending_fb', JSON.stringify(remaining));
+  }
+
+  // ── Reset ──
+  async function resetStats() {
+    if (!confirm('Reset all stats and history?')) return;
+    try { await fetch(API + '/stats/reset', { method: 'DELETE' }); } catch(_) {}
+    document.getElementById('hdr-total').textContent = '0';
+    document.getElementById('hdr-send').textContent  = '0';
+    document.getElementById('hdr-delay').textContent = '0';
+    document.getElementById('hdr-batch').textContent = '0';
+    const spamEl = document.getElementById('hdr-spam');
+    if (spamEl) spamEl.textContent = '0';
+    document.getElementById('donut-wrap').innerHTML = '<div class="empty"><div class="icon">📊</div>Analyze some notifications first</div>';
+    document.getElementById('history-list').innerHTML = '<div class="empty"><div class="icon">⏰</div>No history yet</div>';
+    document.getElementById('results-area').innerHTML = '';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Tab Switching ──
+  function switchTab(tab) {
+    document.getElementById('tab-analyze').classList.toggle('active',    tab === 'analyze');
+    document.getElementById('tab-priorities').classList.toggle('active', tab === 'priorities');
+    document.getElementById('tab-learning').classList.toggle('active',   tab === 'learning');
+    document.getElementById('tab-livefeed').classList.toggle('active',   tab === 'livefeed');
+    const tabAndroid = document.getElementById('tab-android');
+    if (tabAndroid) tabAndroid.classList.toggle('active', tab === 'android');
+    document.getElementById('main-grid').style.display       = tab === 'analyze'    ? 'grid'  : 'none';
+    document.getElementById('priority-page').style.display   = tab === 'priorities' ? 'block' : 'none';
+    document.getElementById('learning-page').style.display   = tab === 'learning'   ? 'block' : 'none';
+    document.getElementById('livefeed-page').style.display   = tab === 'livefeed'   ? 'block' : 'none';
+    const andPage = document.getElementById('android-page');
+    if (andPage) andPage.style.display = tab === 'android' ? 'block' : 'none';
+    if (tab === 'learning')  loadRLSummary();
+    if (tab === 'livefeed')  wsAutoConnect();
+    if (tab === 'android')   loadAndroidPageData();
+  }
+
+  // ── Priority Settings State ──
+  let priorities = JSON.parse(localStorage.getItem('nn_priorities') || 'null') || {
+    vipPersons: [],
+    appWeights: { whatsapp: 70, gmail: 65, slack: 80, instagram: 20, twitter: 15, youtube: 10, sms: 75, phone: 90 },
+    keywords: ['urgent', 'deadline', 'emergency', 'asap', 'critical'],
+    focusHours: [9, 10, 11, 14, 15, 16],
+    thresholdSend: 70,
+    thresholdDelay: 40,
+    spamKeywords: [],
+    spamEnabled: true
+  };
+  // Ensure new fields exist on cached priorities from localStorage
+  if (!Array.isArray(priorities.spamKeywords)) priorities.spamKeywords = [];
+  if (priorities.spamEnabled === undefined) priorities.spamEnabled = true;
+
+  const APP_DEFS = [
+    { key: 'whatsapp', emoji: '💬', label: 'WhatsApp' },
+    { key: 'gmail',    emoji: '📧', label: 'Gmail' },
+    { key: 'slack',    emoji: '💼', label: 'Slack' },
+    { key: 'sms',      emoji: '📱', label: 'SMS' },
+    { key: 'phone',    emoji: '📞', label: 'Phone' },
+    { key: 'instagram',emoji: '📸', label: 'Instagram' },
+    { key: 'twitter',  emoji: '🐦', label: 'Twitter' },
+    { key: 'youtube',  emoji: '▶️', label: 'YouTube' },
+  ];
+
+  const WEIGHT_COLORS = [
+    [0, '#ff6b6b'],
+    [40, '#f9c846'],
+    [70, '#00ffa3'],
+  ];
+
+  function weightColor(val) {
+    if (val >= 70) return '#00ffa3';
+    if (val >= 40) return '#f9c846';
+    return '#ff6b6b';
+  }
+
+  // ── Render VIP List ──
+  function renderVIPs() {
+    const list = document.getElementById('vip-list');
+    if (!priorities.vipPersons.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No VIP persons yet. Add someone above.</div>';
+      return;
+    }
+    list.innerHTML = priorities.vipPersons.map((v, i) => `
+      <div class="vip-item">
+        <div class="vip-avatar">${v.name.charAt(0).toUpperCase()}</div>
+        <div class="vip-info">
+          <div class="vip-name">${escapeHtml(v.name)}</div>
+          <div class="vip-app">${v.app === 'any' ? 'All apps' : v.app}</div>
+        </div>
+        <div class="vip-boost">+35 boost</div>
+        <button class="vip-remove" onclick="removeVIP(${i})" title="Remove">×</button>
+      </div>
+    `).join('');
+  }
+
+  function addVIP() {
+    const nameEl = document.getElementById('vip-name-input');
+    const appEl = document.getElementById('vip-app-select');
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    if (priorities.vipPersons.some(v => v.name.toLowerCase() === name.toLowerCase())) {
+      nameEl.style.borderColor = 'rgba(255,107,107,0.5)';
+      setTimeout(() => nameEl.style.borderColor = '', 1500);
+      return;
+    }
+    priorities.vipPersons.push({ name, app: appEl.value });
+    nameEl.value = '';
+    appEl.value = 'any';
+    renderVIPs();
+  }
+
+  function removeVIP(i) {
+    priorities.vipPersons.splice(i, 1);
+    renderVIPs();
+  }
+
+  // ── Render App Priority Sliders ──
+  function renderAppSliders() {
+    const list = document.getElementById('app-priority-list');
+    list.innerHTML = APP_DEFS.map(app => {
+      const val = priorities.appWeights[app.key] ?? 50;
+      const col = weightColor(val);
+      return `
+        <div class="app-priority-item">
+          <div class="app-priority-header">
+            <div class="app-priority-label">
+              <span class="emoji-sm">${app.emoji}</span>${app.label}
+            </div>
+            <div class="app-priority-val" id="apv-${app.key}">${val}%</div>
+          </div>
+          <div class="priority-track-wrap">
+            <div class="priority-track">
+              <div class="priority-fill" id="apf-${app.key}" style="width:${val}%;background:${col}"></div>
+            </div>
+            <input type="range" class="app-slider" min="0" max="100" value="${val}"
+              oninput="updateAppWeight('${app.key}', this.value)" />
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateAppWeight(key, val) {
+    val = parseInt(val);
+    priorities.appWeights[key] = val;
+    const col = weightColor(val);
+    document.getElementById('apv-' + key).textContent = val + '%';
+    const fill = document.getElementById('apf-' + key);
+    fill.style.width = val + '%';
+    fill.style.background = col;
+  }
+
+  // ── Render Keyword Tags ──
+  function renderKeywords() {
+    const wrap = document.getElementById('keyword-tags');
+    if (!priorities.keywords.length) {
+      wrap.innerHTML = '<div style="font-size:11px;color:var(--muted)">No keywords yet.</div>';
+      return;
+    }
+    wrap.innerHTML = priorities.keywords.map((kw, i) => `
+      <div class="keyword-tag">
+        ${escapeHtml(kw)}
+        <button class="ktag-remove" onclick="removeKeyword(${i})">×</button>
+      </div>
+    `).join('');
+  }
+
+  function addKeyword() {
+    const el = document.getElementById('keyword-input');
+    const kw = el.value.trim().toLowerCase();
+    if (!kw) return;
+    if (!priorities.keywords.includes(kw)) {
+      priorities.keywords.push(kw);
+      renderKeywords();
+    }
+    el.value = '';
+    el.focus();
+  }
+
+  function removeKeyword(i) {
+    priorities.keywords.splice(i, 1);
+    renderKeywords();
+  }
+
+  // ── Spam Keywords ──
+  function renderSpamKeywords() {
+    const wrap = document.getElementById('spam-keyword-tags');
+    if (!wrap) return;
+    if (!priorities.spamKeywords || !priorities.spamKeywords.length) {
+      wrap.innerHTML = '<div style="font-size:11px;color:var(--muted)">No custom spam keywords. Built-in patterns (sale, lottery, loan, etc.) always apply.</div>';
+      return;
+    }
+    wrap.innerHTML = priorities.spamKeywords.map((kw, i) => `
+      <div class="keyword-tag spam-tag">
+        ${escapeHtml(kw)}
+        <button class="ktag-remove" onclick="removeSpamKeyword(${i})">×</button>
+      </div>
+    `).join('');
+  }
+
+  function addSpamKeyword() {
+    const el = document.getElementById('spam-keyword-input');
+    const kw = el.value.trim().toLowerCase();
+    if (!kw) return;
+    if (!Array.isArray(priorities.spamKeywords)) priorities.spamKeywords = [];
+    if (!priorities.spamKeywords.includes(kw)) {
+      priorities.spamKeywords.push(kw);
+      renderSpamKeywords();
+    }
+    el.value = '';
+    el.focus();
+  }
+
+  function removeSpamKeyword(i) {
+    priorities.spamKeywords.splice(i, 1);
+    renderSpamKeywords();
+  }
+
+  function toggleSpam() {
+    priorities.spamEnabled = !priorities.spamEnabled;
+    updateSpamToggleUI();
+  }
+
+  function updateSpamToggleUI() {
+    const pill  = document.getElementById('spam-toggle');
+    const label = document.getElementById('spam-toggle-label');
+    if (!pill) return;
+    if (priorities.spamEnabled) {
+      pill.classList.add('on');
+      if (label) label.textContent = 'Enabled';
+    } else {
+      pill.classList.remove('on');
+      if (label) label.textContent = 'Disabled';
+    }
+  }
+
+  // ── Scheduled Queue ──
+  async function loadScheduledQueue() {
+    try {
+      const res = await fetch(API + '/scheduled');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderScheduledQueue(data.queue || []);
+    } catch(e) {}
+  }
+
+  function renderScheduledQueue(queue) {
+    const list = document.getElementById('sched-queue-list');
+    const label = document.getElementById('sched-status-label');
+    if (!list) return;
+    if (!queue.length) {
+      list.innerHTML = '<div class="empty"><div class="icon">🕐</div>No pending notifications</div>';
+      if (label) label.textContent = '';
+      return;
+    }
+    const focusHrs = priorities.focusHours || [];
+    const curHour  = new Date().getHours();
+    const inFocus  = focusHrs.includes(curHour);
+    // Find next non-focus hour
+    let nextDelivery = '';
+    if (inFocus) {
+      for (let h = curHour + 1; h < 24; h++) {
+        if (!focusHrs.includes(h)) { nextDelivery = `Auto-deliver at ${String(h).padStart(2,'0')}:00`; break; }
+      }
+      if (!nextDelivery) nextDelivery = 'Auto-deliver after midnight';
+    } else {
+      nextDelivery = 'Delivering shortly…';
+    }
+    if (label) label.textContent = nextDelivery;
+
+    list.innerHTML = queue.map(item => {
+      const qd  = item.queued_str || item.queued_at || '';
+      const ago = qd ? timeSince(qd) : '';
+      const app = (item.payload && item.payload.app) || '';
+      const snd = (item.payload && item.payload.sender) || '';
+      return `<div class="sched-item">
+        <div class="sched-dot"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${escapeHtml(app)}${snd ? ' · ' + escapeHtml(snd) : ''} <span style="float:right">${ago}</span></div>
+          <div style="font-size:11px">${escapeHtml((item.summary||'').slice(0,100))}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function timeSince(isoStr) {
+    const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (diff < 60)   return diff + 's ago';
+    if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+    return Math.floor(diff/3600) + 'h ago';
+  }
+
+  // ── Spam Log ──
+  async function loadSpamLog() {
+    try {
+      const res = await fetch(API + '/spam-log');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderSpamLog((data.spam_log || []).reverse().slice(0, 20));
+    } catch(e) {}
+  }
+
+  function renderSpamLog(items) {
+    const list = document.getElementById('spam-log-list');
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '<div class="empty"><div class="icon">✅</div>No spam blocked yet</div>';
+      return;
+    }
+    list.innerHTML = items.map(item => {
+      const p   = item.payload || {};
+      const kws = (item.matched_keywords || []).slice(0, 3).join(', ');
+      return `<div class="history-item">
+        <div class="h-dot spam"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${escapeHtml(p.app||'?')}${p.sender ? ' · ' + escapeHtml(p.sender) : ''}</div>
+          <div style="font-size:11px">${escapeHtml((item.summary||'').slice(0,80))}</div>
+          ${kws ? `<div style="font-size:9px;color:#ff9090;margin-top:2px">🔑 ${escapeHtml(kws)}</div>` : ''}
+        </div>
+        <div style="font-size:10px;color:#ff6060;flex-shrink:0;font-weight:600">SPAM</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function clearSpamLog() {
+    try {
+      await fetch(API + '/spam-log/clear', { method: 'DELETE' });
+      renderSpamLog([]);
+    } catch(e) {}
+  }
+
+  // ── Render Focus Hours ──
+  function renderHours() {
+    const grid = document.getElementById('hours-grid');
+    grid.innerHTML = Array.from({length: 24}, (_, h) => {
+      const label = h === 0 ? '12a' : h < 12 ? h+'a' : h === 12 ? '12p' : (h-12)+'p';
+      const active = priorities.focusHours.includes(h);
+      return `<div class="hour-cell${active?' active':''}" onclick="toggleHour(${h})" title="${String(h).padStart(2,'0')}:00">${label}</div>`;
+    }).join('');
+  }
+
+  function toggleHour(h) {
+    const idx = priorities.focusHours.indexOf(h);
+    if (idx >= 0) priorities.focusHours.splice(idx, 1);
+    else priorities.focusHours.push(h);
+    renderHours();
+  }
+
+  // ── Render Thresholds ──
+  function updateThresholds() {
+    const send = parseInt(document.getElementById('th-send').value);
+    const delay = parseInt(document.getElementById('th-delay').value);
+    priorities.thresholdSend = send;
+    priorities.thresholdDelay = delay;
+    document.getElementById('th-send-val').textContent = send + '%';
+    document.getElementById('th-delay-val').textContent = delay + '%';
+    const batchW = delay;
+    const delayW = send - delay;
+    const sendW = 100 - send;
+    document.getElementById('th-visual').innerHTML = `
+      <div class="th-zone batch" style="width:${batchW}%"></div>
+      <div class="th-zone delay" style="width:${delayW}%"></div>
+      <div class="th-zone send" style="width:${sendW}%"></div>
+    `;
+  }
+
+  // ── Apply priorities to local scoring ──
+  function applyPriorities(payload, score) {
+    const msg = (payload.message || '').toLowerCase();
+    const sender = (payload.sender || '').toLowerCase();
+
+    // VIP boost
+    const isVIP = priorities.vipPersons.some(v => {
+      const nameMatch = sender.includes(v.name.toLowerCase());
+      const appMatch = v.app === 'any' || v.app === payload.app;
+      return nameMatch && appMatch;
+    });
+    if (isVIP) score += 0.35;
+
+    // Keyword boost
+    const kwBoost = priorities.keywords.filter(kw => msg.includes(kw.toLowerCase())).length;
+    if (kwBoost) score += 0.12 * Math.min(kwBoost, 3);
+
+    // App weight modifier
+    const appW = (priorities.appWeights[payload.app] ?? 50) / 100;
+    score = score * 0.7 + (score * appW) * 0.3;
+
+    // Focus hour penalty — during focus hours, only high-priority passes
+    const hour = payload.context?.hour ?? new Date().getHours();
+    if (priorities.focusHours.includes(hour)) score *= 0.6;
+
+    // Location & activity modifiers — context-aware based on notification type.
+    const location = payload.context?.location ?? 'home';
+    const activity = payload.context?.activity ?? 'idle';
+    const isPersonalApp = ['whatsapp','sms','phone'].includes(payload.app);
+    const isVIPSender = isVIP; // already computed above
+
+    // Personal msgs (esp. from VIPs): home+idle = user is free = HIGHER priority.
+    //                                  office+working = user is busy = LOWER priority.
+    // Work msgs:                       office+working = relevant = HIGHER priority.
+    //                                  home+sleeping  = not relevant = LOWER priority.
+    const usePersonalLogic = isPersonalApp || isVIPSender;
+
+    const locationBonus = usePersonalLogic
+      ? { home: +0.15, outside: +0.05, commute:  0.00, gym: -0.05, college: -0.08, office: -0.15 }
+      : { office: +0.15, college: +0.10, commute: +0.05, home: 0.00, outside: -0.05, gym: -0.10 };
+
+    const activityBonus = usePersonalLogic
+      ? { idle: +0.12, scrolling: +0.08, study: -0.05, driving: -0.08, working: -0.12, sleeping: -0.20 }
+      : { working: +0.12, driving: +0.10, study: +0.08, idle: 0.00, scrolling: -0.08, sleeping: -0.20 };
+
+    score += (locationBonus[location] ?? 0);
+    score += (activityBonus[activity] ?? 0);
+
+    return Math.max(0, Math.min(1, score));
+  }
+
+  // ── Backend sync for priorities ────────────────────────────────────────
+  // Syncs with: GET /priorities  POST /priorities
+  async function syncPrioritiesFromServer() {
+    try {
+      const res = await fetch(API + '/priorities');
+      if (!res.ok) throw new Error('no server');
+      const serverPri = await res.json();
+      // Merge server data into local priorities (server is source of truth)
+      priorities = { ...priorities, ...serverPri };
+      // Also persist to localStorage as offline cache
+      localStorage.setItem('nn_priorities', JSON.stringify(priorities));
+    } catch (e) {
+      // Server not reachable — use localStorage cache (already loaded above)
+    }
+  }
+
+  // Initialize all priority UI
+  function initPriorityUI() {
+    renderVIPs();
+    renderAppSliders();
+    renderKeywords();
+    renderSpamKeywords();
+    renderHours();
+    document.getElementById('th-send').value = priorities.thresholdSend;
+    document.getElementById('th-delay').value = priorities.thresholdDelay;
+    updateThresholds();
+    updateSpamToggleUI();
+    // Start on analyze tab, hide priority page
+    document.getElementById('priority-page').style.display = 'none';
+    document.getElementById('learning-page').style.display  = 'none';
+    document.getElementById('main-grid').style.display = 'grid';
+  }
+
+  async function saveSettings() {
+    // Save to localStorage first (instant, works offline)
+    localStorage.setItem('nn_priorities', JSON.stringify(priorities));
+    // Then sync to backend
+    try {
+      await fetch(API + '/priorities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(priorities)
+      });
+    } catch (e) { /* server not running — localStorage save is enough */ }
+    const toast = document.getElementById('save-toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // Startup: init UI from localStorage, then sync fresh data from server
+  initPriorityUI();
+  syncPrioritiesFromServer().then(() => {
+    // Re-render UI with server data
+    renderVIPs();
+    renderAppSliders();
+    renderKeywords();
+    renderSpamKeywords();
+    renderHours();
+    document.getElementById('th-send').value = priorities.thresholdSend;
+    document.getElementById('th-delay').value = priorities.thresholdDelay;
+    updateThresholds();
+    updateSpamToggleUI();
+  });
+
+  // Load stats on startup
+  loadStats();
+  // Load scheduled queue and spam log
+  loadScheduledQueue();
+  loadSpamLog();
+  // Refresh scheduled queue every 30s
+  setInterval(loadScheduledQueue, 30000);
+  // Flush any feedback collected while offline
+  flushPendingFeedback();
+
+  // ══════════════════════════════════════════════════════════════════
+  //  WEBSOCKET — real-time device notification bridge
+  // ══════════════════════════════════════════════════════════════════
+  let _ws = null;
+  let _wsReconnectTimer = null;
+  let _lfCount = 0;
+  const APP_ICONS_LF = {
+    whatsapp:'💬', gmail:'📧', slack:'💼', sms:'📱', instagram:'📸',
+    twitter:'🐦', phone:'📞', youtube:'▶️', telegram:'✈️', discord:'🎮',
+    teams:'🟦', linkedin:'💼', reddit:'🔴', snapchat:'👻', messenger:'💬',
+    facebook:'📘', default:'🔔'
+  };
+  const APP_COLORS_LF = {
+    whatsapp:'#25D366', gmail:'#EA4335', slack:'#4A154B', sms:'#5AC8FA',
+    instagram:'#E1306C', twitter:'#1DA1F2', phone:'#34C759', youtube:'#FF0000',
+    telegram:'#0088cc', discord:'#5865F2', default:'#6366F1'
+  };
+
+  function wsAutoConnect() {
+    if (!_ws || _ws.readyState > 1) wsConnect();
+  }
+
+  function wsConnect() {
+    if (_ws && _ws.readyState < 2) return;
+    const base  = (API || window.location.origin).replace(/^http/, 'ws');
+    const wsUrl = base + '/ws';
+    setWsUI('connecting');
+    try {
+      _ws = new WebSocket(wsUrl);
+    } catch(e) {
+      setWsUI('error', e.message);
+      return;
+    }
+    _ws.onopen = () => {
+      setWsUI('connected');
+      clearTimeout(_wsReconnectTimer);
+    };
+    _ws.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === 'notification')           handleWsNotification(data);
+        else if (data.type === 'spam_blocked')      handleWsSpamBlocked(data);
+        else if (data.type === 'scheduled_notification') handleWsScheduled(data);
+      } catch(e) {}
+    };
+    _ws.onclose = () => {
+      setWsUI('disconnected');
+      // Auto-reconnect every 5s
+      _wsReconnectTimer = setTimeout(() => {
+        if (document.getElementById('livefeed-page').style.display !== 'none') wsConnect();
+      }, 5000);
+    };
+    _ws.onerror = () => setWsUI('error', 'Connection failed');
+  }
+
+  function wsDisconnect() {
+    clearTimeout(_wsReconnectTimer);
+    if (_ws) { _ws.onclose = null; _ws.close(); _ws = null; }
+    setWsUI('disconnected');
+  }
+
+  function setWsUI(state, msg) {
+    const dot   = document.getElementById('ws-dot');
+    const txt   = document.getElementById('ws-status-txt');
+    const badge = document.getElementById('ws-badge');
+    const btnC  = document.getElementById('btn-ws-connect');
+    const btnD  = document.getElementById('btn-ws-disconnect');
+    const ep    = document.getElementById('push-endpoint-txt');
+    if (ep) ep.textContent = (API || window.location.origin) + '/push';
+    const tip   = document.getElementById('tasker-url-hint');
+    if (tip) tip.textContent = (API || window.location.origin) + '/push';
+    const itip  = document.getElementById('ios-url-hint');
+    if (itip) itip.textContent = (API || window.location.origin) + '/push';
+    const STATUS = {
+      connected:    { color:'#00ffa3', shadow:'0 0 6px #00ffa3', text:'WebSocket connected — waiting for device notifications', badge:true, showDisc:true, showConn:false },
+      connecting:   { color:'#ffc84a', shadow:'none',            text:'Connecting…', badge:false, showDisc:false, showConn:false },
+      disconnected: { color:'rgba(255,255,255,.2)', shadow:'none', text:'WebSocket disconnected', badge:false, showDisc:false, showConn:true },
+      error:        { color:'#ff6060', shadow:'none',            text:'Error: ' + (msg||''), badge:false, showDisc:false, showConn:true },
+    };
+    const s = STATUS[state] || STATUS.disconnected;
+    if (dot) { dot.style.background = s.color; dot.style.boxShadow = s.shadow; }
+    if (txt) txt.textContent = s.text;
+    if (badge) badge.style.display = s.badge ? '' : 'none';
+    if (btnC) btnC.style.display = s.showConn ? '' : 'none';
+    if (btnD) btnD.style.display = s.showDisc ? '' : 'none';
+  }
+
+  function handleWsNotification(data) {
+    _lfCount++;
+    const badge = document.getElementById('lf-count-badge');
+    if (badge) badge.textContent = _lfCount + ' received';
+
+    const raw    = data.raw || {};
+    const result = data.result || {};
+    const app    = raw.app || 'other';
+    const icon   = APP_ICONS_LF[app] || APP_ICONS_LF.default;
+    const color  = APP_COLORS_LF[app] || APP_COLORS_LF.default;
+    const pct    = Math.round((result.score || 0) * 100);
+    const action = result.action || 'batch';
+    const actionLabel = { send_now:'🔔 Send Now', delay:'⏱ Delay', batch:'📦 Batch' }[action] || action;
+    const actionColor = { send_now:'var(--send)', delay:'var(--delay)', batch:'var(--batch)' }[action] || 'var(--muted)';
+    const time   = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+    const source = data.source === 'device' ? '📱 device' : '🌐 api';
+
+    // Feed item
+    const feed = document.getElementById('live-feed-list');
+    const emptyEl = feed.querySelector('[data-empty]');
+    if (emptyEl) emptyEl.remove();
+
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:10px;animation:slideIn .3s ease;cursor:default';
+    item.innerHTML =
+      '<div style="width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '44">' + icon + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+          '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">' + escapeHtml(app) + '</span>' +
+          '<span style="font-size:12px;font-weight:600;color:var(--text)">' + escapeHtml(raw.sender || '') + '</span>' +
+          '<span style="font-size:10px;color:rgba(237,240,249,.25);margin-left:auto;flex-shrink:0">' + time + '</span>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(raw.message || result.summary || '') + '</div>' +
+      '</div>' +
+      '<div style="flex-shrink:0;text-align:right;min-width:70px">' +
+        '<div style="font-size:12px;font-weight:700;color:' + actionColor + '">' + pct + '%</div>' +
+        '<div style="font-size:10px;color:' + actionColor + '">' + actionLabel + '</div>' +
+        '<div style="font-size:9px;color:rgba(237,240,249,.2);margin-top:2px">' + source + '</div>' +
+      '</div>';
+
+    feed.insertBefore(item, feed.firstChild);
+    while (feed.children.length > 40) feed.removeChild(feed.lastChild);
+
+    // Latest result panel
+    const latestEl = document.getElementById('lf-latest-result');
+    if (latestEl) {
+      latestEl.innerHTML =
+        '<div style="padding:4px 0">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+            '<div style="width:38px;height:38px;border-radius:9px;background:' + color + '22;border:1px solid ' + color + '44;display:flex;align-items:center;justify-content:center;font-size:18px">' + icon + '</div>' +
+            '<div style="flex:1">' +
+              '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">' + escapeHtml(app) + '</div>' +
+              '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escapeHtml(raw.sender || '') + '</div>' +
+            '</div>' +
+            '<div style="text-align:right">' +
+              '<div style="font-size:20px;font-weight:700;color:' + actionColor + '">' + pct + '%</div>' +
+              '<div style="font-size:11px;color:' + actionColor + '">' + actionLabel + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--muted);background:rgba(255,255,255,.03);border-radius:8px;padding:8px 10px;line-height:1.5;margin-bottom:8px">' + escapeHtml(result.summary || raw.message || '') + '</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+            (result.context ? [
+              ['📍', result.context.location || ''],
+              ['⚡', result.context.activity || ''],
+              ['🕐', (result.context.hour !== undefined ? result.context.hour + ':00' : '')],
+            ].filter(x=>x[1]).map(([ic,val])=>'<div style="font-size:10px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:2px 7px">' + ic + ' <span style="color:var(--text)">' + val + '</span></div>').join('') : '') +
+          '</div>' +
+        '</div>';
+    }
+
+    // Also update the main stats display
+    loadStats().catch(()=>{});
+  }
+
+  function handleWsSpamBlocked(data) {
+    _lfCount++;
+    const badge = document.getElementById('lf-count-badge');
+    if (badge) badge.textContent = _lfCount + ' received';
+
+    const raw  = data.raw || {};
+    const spam = data.spam || {};
+    const app  = raw.app || 'other';
+    const icon = APP_ICONS_LF[app] || '🚫';
+    const time = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+    const kws  = (spam.matched_keywords || []).slice(0, 3).join(', ');
+
+    const feed    = document.getElementById('live-feed-list');
+    const emptyEl = feed.querySelector('[data-empty]');
+    if (emptyEl) emptyEl.remove();
+
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,96,96,0.04);border:1px solid rgba(255,96,96,0.2);border-radius:10px;animation:slideIn .3s ease;cursor:default;opacity:.85';
+    item.innerHTML =
+      '<div style="width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:rgba(255,96,96,0.1);border:1px solid rgba(255,96,96,0.3)">🚫</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+          '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">' + escapeHtml(app) + '</span>' +
+          '<span style="font-size:12px;font-weight:600;color:#ff9090">SPAM BLOCKED</span>' +
+          '<span style="font-size:10px;color:rgba(237,240,249,.25);margin-left:auto;flex-shrink:0">' + time + '</span>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml((raw.message || data.summary || '').slice(0, 80)) + '</div>' +
+        (kws ? '<div style="font-size:10px;color:#ff6060;margin-top:3px">🔑 ' + escapeHtml(kws) + '</div>' : '') +
+      '</div>';
+
+    feed.insertBefore(item, feed.firstChild);
+    // Trim feed
+    const items = feed.querySelectorAll('div[style]');
+    if (items.length > 30) items[items.length - 1].remove();
+
+    // Refresh spam log panel
+    loadSpamLog();
+  }
+
+  function handleWsScheduled(data) {
+    // A previously queued notification is now being delivered
+    const payload = data.payload || {};
+    const app     = payload.app || 'other';
+    const icon    = APP_ICONS_LF[app] || APP_ICONS_LF.default;
+    const color   = APP_COLORS_LF[app] || APP_COLORS_LF.default;
+    const time    = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+
+    const feed    = document.getElementById('live-feed-list');
+    const emptyEl = feed ? feed.querySelector('[data-empty]') : null;
+    if (emptyEl) emptyEl.remove();
+
+    if (feed) {
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(249,200,70,0.05);border:1px solid rgba(249,200,70,0.2);border-radius:10px;animation:slideIn .3s ease;cursor:default';
+      item.innerHTML =
+        '<div style="width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '44">' + icon + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+            '<span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">' + escapeHtml(app) + '</span>' +
+            '<span style="font-size:10px;font-weight:600;color:var(--delay)">⏰ Scheduled Delivery</span>' +
+            '<span style="font-size:10px;color:rgba(237,240,249,.25);margin-left:auto">' + time + '</span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text)">' + escapeHtml((data.summary || '').slice(0, 100)) + '</div>' +
+          (data.queued_at ? '<div style="font-size:9px;color:var(--muted);margin-top:2px">Queued at ' + escapeHtml(data.queued_at) + '</div>' : '') +
+        '</div>';
+      feed.insertBefore(item, feed.firstChild);
+    }
+
+    // Refresh scheduled queue panel (item was just removed from queue)
+    loadScheduledQueue();
+  }
+
+  function clearLiveFeed() {
+    _lfCount = 0;
+    const badge = document.getElementById('lf-count-badge');
+    if (badge) badge.textContent = '0 received';
+    const feed = document.getElementById('live-feed-list');
+    if (feed) feed.innerHTML = '<div data-empty style="text-align:center;padding:32px 16px;color:var(--muted);font-size:12px;line-height:2"><div style="font-size:28px;margin-bottom:8px;opacity:.35">📭</div>Feed cleared</div>';
+    const latest = document.getElementById('lf-latest-result');
+    if (latest) latest.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No results yet</div>';
+  }
+
+  function copyPushEndpoint() {
+    const ep = document.getElementById('push-endpoint-txt');
+    if (!ep) return;
+    navigator.clipboard.writeText(ep.textContent).then(() => {
+      ep.style.color = 'var(--glow-g)';
+      setTimeout(() => ep.style.color = '', 1200);
+    });
+  }
+
+
+  // ═════════════════════════════════════════════════════════════════════════
+  //  ANDROID PAGE LOGIC
+  // ═════════════════════════════════════════════════════════════════════════
+  let _andQrRendered = false;
+  let _andDeviceInfo = null;
+
+  async function loadAndroidPageData() {
+    const dot  = document.getElementById('and-conn-dot');
+    const txt  = document.getElementById('and-counter-txt');
+    try {
+      const res = await fetch(API + '/device/ip');
+      if (!res.ok) throw new Error('Server error');
+      const d  = await res.json();
+      _andDeviceInfo = d;
+
+      // Update counter bar
+      dot.style.background = 'var(--glow-g)';
+      dot.style.boxShadow  = '0 0 8px var(--glow-g)';
+      txt.textContent = `✅ Server online · IP: ${d.lan_ip}:${d.port} · ${d.clients} dashboard client(s) connected`;
+
+      // Update IP boxes
+      const ipEl  = document.getElementById('and-lan-ip');
+      const urlEl = document.getElementById('and-push-url');
+      const adbEl = document.getElementById('adb-server-url');
+      if (ipEl)  ipEl.textContent  = `${d.lan_ip}:${d.port}`;
+      if (urlEl) urlEl.textContent = d.push_url || `http://${d.lan_ip}:${d.port}/push`;
+      if (adbEl) adbEl.textContent = `http://${d.lan_ip}:${d.port}`;
+
+      // Render QR — only once or if URL changed
+      const appUrl = d.app_url || `http://${d.lan_ip}:${d.port}/android-app/`;
+      renderDesktopQR(appUrl);
+
+      // Load device context
+      loadDeviceContext();
+
+    } catch(e) {
+      dot.style.background = 'var(--batch)';
+      dot.style.boxShadow  = 'none';
+      txt.textContent = '❌ Cannot reach server — is it running? (' + e.message + ')';
+    }
+  }
+
+  function renderDesktopQR(url) {
+    const container = document.getElementById('desktop-qr');
+    if (!container) return;
+    // Clear & re-render
+    container.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(container, {
+        text:          url,
+        width:         180,
+        height:        180,
+        colorDark:     '#000000',
+        colorLight:    '#ffffff',
+        correctLevel:  QRCode.CorrectLevel.M
+      });
+      _andQrRendered = true;
+    } else {
+      // Fallback: show URL as text if library not loaded
+      container.innerHTML = `
+        <div style="padding:16px;font-size:11px;text-align:center;color:#333;word-break:break-all">
+          Open on phone:<br/><strong>${escapeHtml(url)}</strong>
+        </div>`;
+    }
+  }
+
+  async function loadDeviceContext() {
+    try {
+      const res = await fetch(API + '/device/context');
+      if (!res.ok) return;
+      const ctx = await res.json();
+      const el  = document.getElementById('and-ctx-display');
+      if (!el) return;
+      if (ctx.status === 'no_context_received') {
+        el.innerHTML = '<span style="color:var(--muted)">No context received yet from the companion app.</span>';
+        return;
+      }
+      el.innerHTML =
+        '📍 <strong style="color:var(--text)">' + (ctx.location || '?') + '</strong>' +
+        ' &nbsp;│&nbsp; 🎯 <strong style="color:var(--text)">' + (ctx.activity || '?') + '</strong>' +
+        ' &nbsp;│&nbsp; 🕐 <strong style="color:var(--text)">' + (ctx.hour != null ? ctx.hour + ':00' : '?') + '</strong>' +
+        (ctx.lat ? ' &nbsp;│&nbsp; 📬 ' + parseFloat(ctx.lat).toFixed(4) + ', ' + parseFloat(ctx.lon).toFixed(4) : '') +
+        '<br/><span style="font-size:10px;color:rgba(255,255,255,.25)">' +
+        'Last updated: ' + (ctx.updated ? new Date(ctx.updated).toLocaleString() : 'unknown') +
+        '</span>';
+    } catch(_) {}
+  }
+
+  function copyAndIP() {
+    const el = document.getElementById('and-lan-ip');
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent)
+      .then(() => { el.style.color='var(--glow-g)'; setTimeout(()=>el.style.color='',1200); });
+  }
+
+  function copyPushURL() {
+    const el = document.getElementById('and-push-url');
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent)
+      .then(() => { el.style.color= 'var(--glow-b)'; setTimeout(()=>el.style.color='',1200); });
+  }
+
+  function copyAdb(btn) {
+    const block = btn.parentElement;
+    const text  = (block.textContent || '').replace(/Copy/g,'').trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+  }
+
+  function downloadTaskerXmlDesktop() {
+    window.location.href = API + '/device/tasker-xml';
+  }
+
+  function openAndroidApp() {
+    const url = _andDeviceInfo
+      ? (_andDeviceInfo.app_url || `http://${_andDeviceInfo.lan_ip}:${_andDeviceInfo.port}/android-app/`)
+      : window.location.origin + '/android-app/';
+    window.open(url, '_blank');
+  }
+
+  // ── Listen for context_update events from companion app via existing WS ──
+  // (Hook into the existing WS message handler)
+  const _origHandleWsMsg = typeof handleWsMessage !== 'undefined' ? handleWsMessage : null;
+  document.addEventListener('nn_ws_msg', function(e) {
+    const data = e.detail;
+    if (data && data.type === 'context_update') {
+      // If android tab is visible, refresh context display
+      const andPage = document.getElementById('android-page');
+      if (andPage && andPage.style.display !== 'none') loadDeviceContext();
+    }
+  });
+
+</script>
+</body>
+</html>

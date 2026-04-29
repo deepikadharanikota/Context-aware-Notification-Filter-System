@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#04060e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="NeuralNotify" />
+<meta name="description" content="NeuralNotify Android companion — forward every notification to your AI filter in real time." />
+<title>NeuralNotify Bridge</title>
+<link rel="manifest" href="/android-app/manifest.json" />
+<link rel="apple-touch-icon" href="/android-app/icon-192.png" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:      #04060e;
+    --panel:   rgba(255,255,255,0.04);
+    --border:  rgba(255,255,255,0.08);
+    --glow-g:  #00ffa3;
+    --glow-b:  #00c2ff;
+    --glow-p:  #b46eff;
+    --text:    #e8eaf6;
+    --muted:   rgba(232,234,246,0.45);
+    --send:    #00ffa3;
+    --delay:   #f9c846;
+    --batch:   #ff6b6b;
+    --radius:  18px;
+    --font-h:  'Syne', sans-serif;
+    --font-m:  'Space Mono', monospace;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-m);
+    font-size: 13px;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Noise + mesh */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse 70% 50% at 20% 10%, rgba(0,255,163,0.09) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 60% at 85% 80%, rgba(0,194,255,0.07) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 60% 5%,  rgba(180,110,255,0.06) 0%, transparent 60%);
+    opacity: 0.9;
+  }
+
+  /* ── Shell ── */
+  .shell {
+    position: relative; z-index: 1;
+    height: 100vh;
+    display: flex; flex-direction: column;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bot);
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(4,6,14,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    flex-shrink: 0;
+  }
+
+  .logo-mark {
+    width: 38px; height: 38px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--glow-g), var(--glow-b));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 0 20px rgba(0,255,163,0.35);
+    animation: pulse-logo 3s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse-logo {
+    0%,100% { box-shadow: 0 0 20px rgba(0,255,163,0.35); }
+    50%      { box-shadow: 0 0 35px rgba(0,255,163,0.55), 0 0 60px rgba(0,194,255,0.2); }
+  }
+
+  .topbar-title {
+    flex: 1;
+    font-family: var(--font-h);
+    font-size: 17px; font-weight: 800;
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+
+  .conn-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: background 0.4s, box-shadow 0.4s;
+    flex-shrink: 0;
+  }
+  .conn-dot.live   { background: var(--glow-g); box-shadow: 0 0 8px var(--glow-g); }
+  .conn-dot.error  { background: var(--batch); }
+  .conn-dot.pairing { background: var(--delay); animation: blink 1s ease infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  /* ── Tab bar ── */
+  .tabbar {
+    display: flex;
+    padding: 8px 12px 4px;
+    gap: 4px;
+    background: rgba(4,6,14,0.8);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tab-btn {
+    flex: 1; padding: 8px 4px;
+    border: none; border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-h);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+  }
+  .tab-btn .tab-icon { font-size: 18px; }
+  .tab-btn.active {
+    background: linear-gradient(135deg, rgba(0,255,163,0.12), rgba(0,194,255,0.08));
+    color: var(--glow-g);
+    border: 1px solid rgba(0,255,163,0.2);
+  }
+
+  /* ── Pages ── */
+  .pages { flex: 1; overflow: hidden; position: relative; }
+
+  .page {
+    position: absolute; inset: 0;
+    overflow-y: auto;
+    padding: 16px;
+    display: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .page.active { display: block; }
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 12px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .card-title {
+    font-family: var(--font-h);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-title::before {
+    content: ''; display: block;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--glow-g); box-shadow: 0 0 6px var(--glow-g);
+  }
+
+  /* ── Setup wizard ── */
+  .wizard-steps {
+    display: flex; justify-content: center; gap: 6px;
+    margin-bottom: 20px;
+  }
+  .wizard-step {
+    width: 28px; height: 6px; border-radius: 3px;
+    background: var(--border); transition: background 0.3s;
+  }
+  .wizard-step.done  { background: var(--glow-g); }
+  .wizard-step.active { background: rgba(0,255,163,0.5); }
+
+  .wizard-page { display: none; }
+  .wizard-page.active { display: block; animation: fadeUp 0.35s ease; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .wizard-icon {
+    font-size: 52px; text-align: center;
+    margin-bottom: 14px; display: block;
+    filter: drop-shadow(0 0 16px rgba(0,255,163,0.4));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
+  }
+
+  .wizard-h {
+    font-family: var(--font-h);
+    font-size: 22px; font-weight: 800; text-align: center;
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  .wizard-sub {
+    font-size: 12px; color: var(--muted); text-align: center;
+    line-height: 1.7; margin-bottom: 22px;
+  }
+
+  /* IP input */
+  .ip-input-wrap {
+    display: flex; gap: 8px; margin-bottom: 14px;
+  }
+  .ip-input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--font-m);
+    font-size: 15px; padding: 12px 16px;
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    -webkit-appearance: none;
+  }
+  .ip-input:focus {
+    border-color: rgba(0,255,163,0.5);
+    box-shadow: 0 0 0 3px rgba(0,255,163,0.1);
+  }
+  .ip-input::placeholder { color: rgba(255,255,255,0.2); }
+
+  /* Buttons */
+  .btn {
+    width: 100%; padding: 14px;
+    border: none; border-radius: 14px;
+    font-family: var(--font-h); font-size: 14px; font-weight: 700;
+    letter-spacing: 0.04em; cursor: pointer;
+    transition: all 0.2s; position: relative; overflow: hidden;
+  }
+  .btn::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    transform: translateX(-100%); transition: transform 0.5s;
+  }
+  .btn:active::after { transform: translateX(100%); }
+
+  .btn-primary {
+    background: linear-gradient(90deg, var(--glow-g), var(--glow-b));
+    color: #000;
+    box-shadow: 0 4px 20px rgba(0,255,163,0.25);
+  }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .btn-secondary:active { transform: scale(0.98); }
+
+  .btn-danger {
+    background: rgba(255,107,107,0.1);
+    border: 1px solid rgba(255,107,107,0.25);
+    color: var(--batch);
+  }
+
+  .btn-sm {
+    width: auto; padding: 8px 16px;
+    font-size: 12px; border-radius: 10px;
+  }
+
+  /* Status banner */
+  .status-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: 12px;
+    font-size: 12px; margin-bottom: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    transition: all 0.3s;
+  }
+  .status-banner.ok    { border-color: rgba(0,255,163,0.3); background: rgba(0,255,163,0.06); color: var(--glow-g); }
+  .status-banner.warn  { border-color: rgba(249,200,70,0.3); background: rgba(249,200,70,0.06); color: var(--delay); }
+  .status-banner.error { border-color: rgba(255,107,107,0.3); background: rgba(255,107,107,0.06); color: var(--batch); }
+
+  /* Notification feed items */
+  .feed-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    margin-bottom: 8px;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn {
+    from { opacity:0; transform:translateY(10px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .feed-app-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+  }
+  .feed-body { flex: 1; min-width: 0; }
+  .feed-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .feed-app { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .feed-action {
+    font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 20px;
+    margin-left: auto; flex-shrink: 0;
+  }
+  .feed-action.send_now { background: rgba(0,255,163,0.15); color: var(--glow-g); border: 1px solid rgba(0,255,163,0.3); }
+  .feed-action.delay    { background: rgba(249,200,70,0.15); color: var(--delay);  border: 1px solid rgba(249,200,70,0.3); }
+  .feed-action.batch    { background: rgba(255,107,107,0.15); color: var(--batch); border: 1px solid rgba(255,107,107,0.3); }
+  .feed-action.spam     { background: rgba(255,96,96,0.15); color: #ff9090;        border: 1px solid rgba(255,96,96,0.3); }
+  .feed-sender { font-size: 13px; font-weight: 700; color: var(--text); }
+  .feed-message { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .feed-score  { font-size: 9px; color: rgba(255,255,255,0.25); margin-top: 3px; }
+
+  /* Context sliders row */
+  .ctx-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ctx-select {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-m);
+    font-size: 12px; padding: 10px 12px;
+    outline: none; -webkit-appearance: none; appearance: none;
+    cursor: pointer;
+  }
+  .ctx-select option { background: #0c0f1e; }
+
+  /* Stats mini row */
+  .mini-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 14px; }
+  .mini-stat {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 8px; text-align: center;
+  }
+  .mini-stat-val { font-size: 20px; font-weight: 700; color: var(--text); font-family: var(--font-h); }
+  .mini-stat-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  /* QR container */
+  .qr-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; margin-bottom: 12px;
+  }
+  #qr-canvas {
+    border-radius: 14px;
+    box-shadow: 0 0 0 3px rgba(0,255,163,0.25), 0 0 30px rgba(0,255,163,0.1);
+    background: #fff;
+    padding: 10px;
+  }
+  .qr-label {
+    margin-top: 12px; font-size: 11px; color: var(--muted); text-align: center;
+  }
+
+  /* Step list */
+  .step-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .step-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 12px; color: var(--muted); line-height: 1.6;
+  }
+  .step-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--glow-g); font-weight: 700;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .step-txt strong { color: var(--text); }
+
+  /* Code block */
+  .code-block {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 12px 14px;
+    font-family: var(--font-m); font-size: 11px;
+    color: var(--glow-g); line-height: 1.8;
+    word-break: break-all; position: relative;
+  }
+  .copy-code-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 6px; padding: 3px 8px;
+    color: var(--glow-g); font-size: 10px; cursor: pointer;
+  }
+
+  /* Test result */
+  .test-result {
+    padding: 12px 14px; border-radius: 12px; margin-top: 10px;
+    font-size: 12px; display: none; animation: fadeUp 0.3s ease;
+  }
+  .test-result.ok { background: rgba(0,255,163,0.08); border: 1px solid rgba(0,255,163,0.25); color: var(--glow-g); }
+  .test-result.err { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.25); color: var(--batch); }
+
+  /* Context auto badge */
+  .ctx-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(180,110,255,0.1); border: 1px solid rgba(180,110,255,0.25);
+    border-radius: 20px; padding: 3px 10px;
+    font-size: 10px; color: var(--glow-p);
+  }
+
+  /* Spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; animation: spin 0.8s linear infinite; }
+
+  /* Pulsing ring for connected state */
+  @keyframes ring-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(0,255,163,0.4); }
+    70%  { box-shadow: 0 0 0 10px rgba(0,255,163,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,255,163,0); }
+  }
+  .pulse-ring { animation: ring-pulse 2s ease infinite; }
+
+  /* Permission status */
+  .perm-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px;
+  }
+  .perm-icon { font-size: 18px; width: 28px; text-align: center; }
+  .perm-label { flex: 1; color: var(--muted); }
+  .perm-label strong { color: var(--text); display: block; }
+  .perm-status { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+  .perm-status.granted { background: rgba(0,255,163,0.12); color: var(--glow-g); border: 1px solid rgba(0,255,163,0.25); }
+  .perm-status.denied  { background: rgba(255,107,107,0.12); color: var(--batch);  border: 1px solid rgba(255,107,107,0.25); }
+  .perm-status.pending { background: rgba(249,200,70,0.12);  color: var(--delay);  border: 1px solid rgba(249,200,70,0.25); }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: calc(var(--safe-bot) + 80px); left: 50%; transform: translateX(-50%) translateY(20px);
+    background: rgba(10,14,26,0.95); border: 1px solid var(--border);
+    border-radius: 30px; padding: 10px 20px;
+    font-size: 12px; color: var(--text);
+    z-index: 999; opacity: 0; pointer-events: none;
+    transition: all 0.3s; backdrop-filter: blur(20px); white-space: nowrap;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Empty feed state */
+  .empty-feed {
+    text-align: center; padding: 40px 16px;
+    color: var(--muted); font-size: 12px; line-height: 2;
+  }
+  .empty-feed .e-icon { font-size: 40px; opacity: 0.3; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div class="shell">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo-mark">🧠</div>
+    <div class="topbar-title">NeuralNotify</div>
+    <div class="conn-dot" id="conn-dot" title="Connection status"></div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tabbar">
+    <button class="tab-btn active" id="tab-home" onclick="showTab('home')">
+      <span class="tab-icon">🏠</span>Home
+    </button>
+    <button class="tab-btn" id="tab-feed" onclick="showTab('feed')">
+      <span class="tab-icon">📲</span>Feed
+    </button>
+    <button class="tab-btn" id="tab-setup" onclick="showTab('setup')">
+      <span class="tab-icon">⚙️</span>Setup
+    </button>
+    <button class="tab-btn" id="tab-context" onclick="showTab('context')">
+      <span class="tab-icon">📍</span>Context
+    </button>
+  </div>
+
+  <!-- Pages -->
+  <div class="pages">
+
+    <!-- ══════════ HOME PAGE ══════════ -->
+    <div class="page active" id="page-home">
+
+      <!-- Connection status -->
+      <div class="status-banner" id="home-status-banner">
+        <span id="home-status-icon">⚪</span>
+        <span id="home-status-txt">Not connected to NeuralNotify server</span>
+      </div>
+
+      <!-- Mini stats -->
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-val" id="st-total">0</div>
+          <div class="mini-stat-lbl">Total</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-val" style="color:var(--send)" id="st-send">0</div>
+          <div class="mini-stat-lbl">Send</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-val" style="color:var(--delay)" id="st-delay">0</div>
+          <div class="mini-stat-lbl">Delay</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-val" style="color:var(--batch)" id="st-batch">0</div>
+          <div class="mini-stat-lbl">Batch</div>
+        </div>
+      </div>
+
+      <!-- Server info card -->
+      <div class="card">
+        <div class="card-title">Server Connection</div>
+        <div class="ip-input-wrap">
+          <input class="ip-input" id="server-ip" type="text" inputmode="url"
+            placeholder="192.168.x.x:8000" autocomplete="off" autocorrect="off" spellcheck="false" />
+          <button class="btn btn-primary btn-sm" onclick="connectServer()" id="conn-btn">Connect</button>
+        </div>
+        <div class="test-result" id="conn-result"></div>
+      </div>
+
+      <!-- Permissions card -->
+      <div class="card">
+        <div class="card-title">Permissions</div>
+        <div class="perm-row">
+          <div class="perm-icon">🔔</div>
+          <div class="perm-label"><strong>Browser Notifications</strong>Required to show filtered results</div>
+          <div class="perm-status" id="perm-notif">pending</div>
+        </div>
+        <div class="perm-row">
+          <div class="perm-icon">📍</div>
+          <div class="perm-label"><strong>Location</strong>Auto-detect home/office/commute context</div>
+          <div class="perm-status" id="perm-geo">pending</div>
+        </div>
+        <div class="perm-row" style="border-bottom:none">
+          <div class="perm-icon">🌐</div>
+          <div class="perm-label"><strong>WebSocket</strong>Real-time notification feed</div>
+          <div class="perm-status" id="perm-ws">pending</div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:14px" onclick="requestPermissions()">
+          Request Permissions
+        </button>
+      </div>
+
+      <!-- Send test -->
+      <div class="card">
+        <div class="card-title">Test Connection</div>
+        <button class="btn btn-secondary" onclick="sendTestNotification()">
+          📤 Send Test Notification
+        </button>
+        <div class="test-result" id="test-result"></div>
+      </div>
+
+    </div>
+
+    <!-- ══════════ LIVE FEED PAGE ══════════ -->
+    <div class="page" id="page-feed">
+      <div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div class="conn-dot" id="feed-dot"></div>
+        <span id="feed-status" style="font-size:12px;color:var(--muted);flex:1">Disconnected</span>
+        <button class="btn btn-secondary btn-sm" onclick="clearFeed()">Clear</button>
+      </div>
+      <div id="feed-list">
+        <div class="empty-feed">
+          <div class="e-icon">📭</div>
+          Waiting for notifications…<br/>
+          <span style="font-size:11px">Connect to server on the Home tab</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ SETUP PAGE ══════════ -->
+    <div class="page" id="page-setup">
+
+      <!-- Wizard steps indicator -->
+      <div class="wizard-steps" id="wizard-steps">
+        <div class="wizard-step active" id="ws-0"></div>
+        <div class="wizard-step" id="ws-1"></div>
+        <div class="wizard-step" id="ws-2"></div>
+      </div>
+
+      <!-- Step 1: Welcome -->
+      <div class="wizard-page active" id="wz-0">
+        <span class="wizard-icon">🤖</span>
+        <div class="wizard-h">Android Setup</div>
+        <div class="wizard-sub">
+          Connect your Android phone to NeuralNotify using <strong style="color:var(--text)">Tasker</strong>.<br/>
+          Every notification gets forwarded to the AI filter automatically — no root required.
+        </div>
+        <div class="card">
+          <div class="card-title">What you'll need</div>
+          <div class="step-list">
+            <div class="step-item"><div class="step-num">1</div><div class="step-txt"><strong>Tasker</strong> app (free APK at tasker.joaoapps.com or Play Store)</div></div>
+            <div class="step-item"><div class="step-num">2</div><div class="step-txt"><strong>Notification Access</strong> granted to Tasker in Android Settings</div></div>
+            <div class="step-item"><div class="step-num">3</div><div class="step-txt">Phone and PC on the <strong>same Wi-Fi</strong> network</div></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="wizardNext()">Let's Go →</button>
+      </div>
+
+      <!-- Step 2: Tasker XML download -->
+      <div class="wizard-page" id="wz-1">
+        <span class="wizard-icon">📥</span>
+        <div class="wizard-h">Import Profile</div>
+        <div class="wizard-sub">
+          Download the pre-configured Tasker profile with <strong style="color:var(--text)">your server IP already filled in</strong>.
+        </div>
+        <div class="card">
+          <div class="card-title">Download Tasker XML</div>
+          <div class="code-block" style="margin-bottom:12px">
+            <span id="xml-url-display">http://&lt;server&gt;:8000/device/tasker-xml</span>
+          </div>
+          <button class="btn btn-primary" onclick="downloadTaskerXML()" id="dl-xml-btn">
+            📥 Download neuralnotify_tasker.xml
+          </button>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.8">
+            Then in Tasker: <strong style="color:var(--text)">Long-press Profiles → Import → select file</strong>. Enable the profile ✅
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Grant Notification Access</div>
+          <div class="step-list">
+            <div class="step-item"><div class="step-num">1</div><div class="step-txt">Open Android <strong>Settings → Apps → Tasker</strong></div></div>
+            <div class="step-item"><div class="step-num">2</div><div class="step-txt">Tap <strong>Notification Access</strong> → Enable</div></div>
+            <div class="step-item"><div class="step-num">3</div><div class="step-txt">Or go to <strong>Settings → Notifications → Notification Access → Tasker</strong></div></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn btn-secondary" onclick="wizardBack()">← Back</button>
+          <button class="btn btn-primary" onclick="wizardNext()">Done →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Done / test -->
+      <div class="wizard-page" id="wz-2">
+        <span class="wizard-icon">✅</span>
+        <div class="wizard-h">All Set!</div>
+        <div class="wizard-sub">
+          Tasker is configured. Send yourself a WhatsApp message to verify the pipeline is working.
+        </div>
+        <div class="card">
+          <div class="card-title">Live Endpoint</div>
+          <div class="code-block" style="position:relative">
+            <button class="copy-code-btn" onclick="copyEndpoint()">Copy</button>
+            <span id="push-endpoint-wz">http://&lt;server&gt;:8000/push</span>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.8">
+            Tasker POSTs every notification here → NeuralNotify scores it → result appears in Live Feed.
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="sendTestNotification();showTab('feed')">
+          🚀 Send Test & View Feed
+        </button>
+        <button class="btn btn-secondary" style="margin-top:8px" onclick="wizardReset()">
+          ← Restart Setup
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ══════════ CONTEXT PAGE ══════════ -->
+    <div class="page" id="page-context">
+
+      <div class="card">
+        <div class="card-title">Current Context</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+          Tell NeuralNotify where you are and what you're doing. This helps it prioritize notifications correctly.
+        </div>
+        <div class="ctx-row">
+          <div>
+            <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:6px">📍 Location</label>
+            <select class="ctx-select" id="ctx-location" onchange="syncContext()">
+              <option value="home">🏠 Home</option>
+              <option value="office">🏢 Office</option>
+              <option value="college">🎓 College</option>
+              <option value="commute">🚶 Commute</option>
+              <option value="gym">💪 Gym</option>
+              <option value="outside">🌳 Outside</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:6px">🎯 Activity</label>
+            <select class="ctx-select" id="ctx-activity" onchange="syncContext()">
+              <option value="idle">😴 Idle</option>
+              <option value="working">💼 Working</option>
+              <option value="study">📚 Studying</option>
+              <option value="scrolling">📱 Scrolling</option>
+              <option value="driving">🚗 Driving</option>
+              <option value="sleeping">😴 Sleeping</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="pushContext()" id="ctx-push-btn">
+          📡 Push Context to Server
+        </button>
+        <div class="test-result" id="ctx-result"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">GPS Auto-Detect</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+          Use your phone's GPS to automatically detect home vs office vs commute.
+        </div>
+        <button class="btn btn-secondary" onclick="autoDetectLocation()" id="geo-btn">
+          🛰️ Detect My Location
+        </button>
+        <div id="geo-result" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Last Synced to Server</div>
+        <div id="last-ctx-display" style="font-size:12px;color:var(--muted);line-height:1.9">
+          No context pushed yet.
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- /pages -->
+</div><!-- /shell -->
+
+<!-- QR.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────
+let serverBase = localStorage.getItem('nn_server') || '';
+let ws = null;
+let feedCount = 0;
+let wizardStep = 0;
+let stats = { total: 0, send_now: 0, delay: 0, batch: 0 };
+
+// ─── Init ───────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/android-app/sw.js').catch(() => {});
+  }
+
+  // Restore server IP
+  if (serverBase) {
+    document.getElementById('server-ip').value = serverBase;
+    connectServer(true); // auto-connect silently
+  }
+
+  // Check permissions
+  checkPermissions();
+
+  // Update XML/push URLs in setup page
+  updateSetupURLs();
+
+  // Auto-detect context from device
+  autoSyncTime();
+
+  // Try to auto-connect WS if server is known
+  if (serverBase) scheduleWsConnect();
+});
+
+// ─── Tab switching ──────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── Server connection ───────────────────────────────────────────────────────
+async function connectServer(silent = false) {
+  const raw = document.getElementById('server-ip').value.trim();
+  if (!raw) { toast('Enter server IP first'); return; }
+
+  const base = raw.includes('://') ? raw.replace(/\/$/, '') : 'http://' + raw.replace(/\/$/, '');
+  serverBase = base;
+  localStorage.setItem('nn_server', base);
+  updateSetupURLs();
+
+  if (!silent) showLoading('conn-btn', true);
+
+  try {
+    const res = await fetch(base + '/device/ip', { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    showLoading('conn-btn', false);
+
+    setStatusBanner('ok', '✅', `Connected — ${data.clients} dashboard client(s) online`);
+    setConnDot('live');
+    setPerm('ws', 'granted');
+    if (!silent) {
+      showTestResult('conn-result', true, `Server OK · IP: ${data.lan_ip} · Port: ${data.port}`);
+    }
+    updateSetupURLs(data);
+    scheduleWsConnect();
+    loadStats();
+  } catch (e) {
+    showLoading('conn-btn', false);
+    setStatusBanner('error', '❌', 'Cannot reach server — check IP and Wi-Fi');
+    setConnDot('error');
+    setPerm('ws', 'denied');
+    if (!silent) showTestResult('conn-result', false, 'Connection failed: ' + e.message);
+  }
+}
+
+function setStatusBanner(type, icon, text) {
+  const b = document.getElementById('home-status-banner');
+  document.getElementById('home-status-icon').textContent = icon;
+  document.getElementById('home-status-txt').textContent = text;
+  b.className = 'status-banner ' + type;
+}
+
+function setConnDot(state) {
+  document.querySelectorAll('.conn-dot').forEach(d => { d.className = 'conn-dot ' + state; });
+}
+
+function showLoading(btnId, on) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = on;
+  btn.textContent = on ? '⏳ Connecting…' : 'Connect';
+}
+
+function showTestResult(id, ok, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = (ok ? '✅ ' : '❌ ') + msg;
+  el.className = 'test-result ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+async function loadStats() {
+  if (!serverBase) return;
+  try {
+    const res = await fetch(serverBase + '/stats');
+    const data = await res.json();
+    stats = data;
+    document.getElementById('st-total').textContent = data.total || 0;
+    document.getElementById('st-send').textContent  = data.send_now || 0;
+    document.getElementById('st-delay').textContent = data.delay || 0;
+    document.getElementById('st-batch').textContent = data.batch || 0;
+  } catch {}
+}
+
+// ─── WebSocket ───────────────────────────────────────────────────────────────
+let wsRetryTimer;
+
+function scheduleWsConnect() {
+  clearTimeout(wsRetryTimer);
+  wsRetryTimer = setTimeout(connectWs, 300);
+}
+
+function connectWs() {
+  if (!serverBase) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  const wsUrl = serverBase.replace(/^http/, 'ws') + '/ws';
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    setConnDot('live');
+    setPerm('ws', 'granted');
+    setFeedStatus('🟢 Live — receiving notifications', true);
+  };
+
+  ws.onclose = () => {
+    setConnDot('error');
+    setFeedStatus('🔴 Disconnected — retrying…', false);
+    setPerm('ws', 'denied');
+    // Retry in 4 seconds
+    wsRetryTimer = setTimeout(connectWs, 4000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+
+  ws.onmessage = (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+      handleWsMessage(data);
+    } catch {}
+  };
+}
+
+function setFeedStatus(text, live) {
+  const el = document.getElementById('feed-status');
+  const dot = document.getElementById('feed-dot');
+  if (el) el.textContent = text;
+  if (dot) dot.className = 'conn-dot ' + (live ? 'live' : 'error');
+}
+
+function handleWsMessage(data) {
+  if (data.type === 'notification' && data.result) {
+    appendFeedItem(data);
+    loadStats();
+    showSystemNotification(data);
+  } else if (data.type === 'spam_blocked') {
+    appendSpamFeedItem(data);
+  } else if (data.type === 'context_update') {
+    // Context was updated from another client
+  }
+}
+
+// ─── Feed items ───────────────────────────────────────────────────────────────
+const APP_ICONS = {
+  whatsapp:'💬', gmail:'📧', slack:'💼', telegram:'✈️',
+  instagram:'📸', twitter:'🐦', discord:'🎮', youtube:'📺',
+  sms:'💬', phone:'📞', messenger:'💬', facebook:'👤',
+  snapchat:'👻', teams:'💼', linkedin:'💼', reddit:'🤖', default:'🔔'
+};
+
+function appendFeedItem(data) {
+  const r   = data.result;
+  const raw = data.raw || {};
+  const app = (raw.app || r.app_type || 'other').toLowerCase();
+  const icon = APP_ICONS[app] || APP_ICONS.default;
+  const action = r.action || 'batch';
+
+  feedCount++;
+  const feed = document.getElementById('feed-list');
+  const empty = feed.querySelector('.empty-feed');
+  if (empty) empty.remove();
+
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `
+    <div class="feed-app-icon">${icon}</div>
+    <div class="feed-body">
+      <div class="feed-top">
+        <span class="feed-app">${escHtml(app)}</span>
+        <span class="feed-action ${action}">${actionLabel(action)}</span>
+      </div>
+      <div class="feed-sender">${escHtml(raw.sender || r.sender || 'Unknown')}</div>
+      <div class="feed-message">${escHtml((raw.message || r.summary || '').slice(0, 90))}</div>
+      <div class="feed-score">Score: ${Math.round((r.score || 0) * 100)}%</div>
+    </div>`;
+  feed.insertBefore(item, feed.firstChild);
+
+  // Keep feed at max 50 items
+  const items = feed.querySelectorAll('.feed-item');
+  if (items.length > 50) items[items.length - 1].remove();
+}
+
+function appendSpamFeedItem(data) {
+  const raw = data.raw || {};
+  const feed = document.getElementById('feed-list');
+  const empty = feed.querySelector('.empty-feed');
+  if (empty) empty.remove();
+
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.style.opacity = '0.7';
+  item.innerHTML = `
+    <div class="feed-app-icon">🚫</div>
+    <div class="feed-body">
+      <div class="feed-top">
+        <span class="feed-app">${escHtml(raw.app || 'unknown')}</span>
+        <span class="feed-action spam">SPAM</span>
+      </div>
+      <div class="feed-sender">${escHtml(raw.sender || 'Unknown')}</div>
+      <div class="feed-message">${escHtml((raw.message || '').slice(0, 80))}</div>
+    </div>`;
+  feed.insertBefore(item, feed.firstChild);
+}
+
+function actionLabel(a) {
+  return { send_now:'🔔 Send', delay:'⏱ Delay', batch:'📦 Batch', spam:'🚫 Spam' }[a] || a;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function clearFeed() {
+  feedCount = 0;
+  document.getElementById('feed-list').innerHTML = `
+    <div class="empty-feed"><div class="e-icon">📭</div>Feed cleared</div>`;
+}
+
+// ─── System notification (browser) ──────────────────────────────────────────
+function showSystemNotification(data) {
+  if (Notification.permission !== 'granted') return;
+  const r   = data.result;
+  const raw = data.raw || {};
+  if (r.action !== 'send_now') return; // only show high-priority ones
+  new Notification(`${raw.sender || 'NeuralNotify'} · ${(raw.app || '').toUpperCase()}`, {
+    body: raw.message || r.summary || '',
+    icon: '/android-app/icon-192.png',
+    tag: 'nn-' + Date.now(),
+    silent: false,
+  });
+}
+
+// ─── Test notification ────────────────────────────────────────────────────────
+async function sendTestNotification() {
+  if (!serverBase) { toast('Connect to server first'); return; }
+  try {
+    const res = await fetch(serverBase + '/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app: 'whatsapp',
+        sender: 'Test Device 📱',
+        message: 'Hello from NeuralNotify Android companion app!',
+        context: { hour: new Date().getHours(), location: 'home', activity: 'idle' }
+      })
+    });
+    const data = await res.json();
+    const action = data.result?.[0]?.action || 'unknown';
+    showTestResult('test-result', true, `Delivered · Action: ${action}`);
+    toast('✅ Test sent! Check Live Feed.');
+    showTab('feed');
+  } catch (e) {
+    showTestResult('test-result', false, 'Send failed: ' + e.message);
+    toast('❌ Test failed — is server running?');
+  }
+}
+
+// ─── Permissions ──────────────────────────────────────────────────────────────
+async function requestPermissions() {
+  // Notification
+  try {
+    const p = await Notification.requestPermission();
+    setPerm('notif', p === 'granted' ? 'granted' : 'denied');
+  } catch { setPerm('notif', 'denied'); }
+
+  // Geolocation
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      ()  => setPerm('geo', 'granted'),
+      ()  => setPerm('geo', 'denied')
+    );
+  } else {
+    setPerm('geo', 'denied');
+  }
+
+  // WS
+  if (serverBase) scheduleWsConnect();
+
+  toast('Permissions requested');
+}
+
+function checkPermissions() {
+  // Notifications
+  if (Notification.permission === 'granted') setPerm('notif', 'granted');
+  else if (Notification.permission === 'denied') setPerm('notif', 'denied');
+  else setPerm('notif', 'pending');
+
+  // Geo - just check if API exists
+  setPerm('geo', navigator.geolocation ? 'pending' : 'denied');
+
+  // WS starts pending
+  setPerm('ws', 'pending');
+}
+
+function setPerm(id, status) {
+  const el = document.getElementById('perm-' + id);
+  if (!el) return;
+  el.textContent = status;
+  el.className = 'perm-status ' + status;
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+function autoSyncTime() {
+  // Set hour automatically; sync silently every 5 minutes
+  setInterval(syncContext, 5 * 60 * 1000);
+}
+
+function syncContext() {
+  // Just reads the dropdowns — actual push is manual or triggered by pushContext()
+}
+
+async function pushContext() {
+  if (!serverBase) { toast('Connect to server first'); return; }
+  const location = document.getElementById('ctx-location').value;
+  const activity = document.getElementById('ctx-activity').value;
+  const hour     = new Date().getHours();
+
+  const btn = document.getElementById('ctx-push-btn');
+  btn.disabled = true; btn.textContent = '⏳ Pushing…';
+
+  try {
+    const res = await fetch(serverBase + '/device/context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ location, activity, hour })
+    });
+    const data = await res.json();
+    btn.disabled = false; btn.textContent = '📡 Push Context to Server';
+    showTestResult('ctx-result', true, `Synced: ${location} · ${activity} · ${hour}:00`);
+    document.getElementById('last-ctx-display').innerHTML =
+      `📍 <strong style="color:var(--text)">${location}</strong> &nbsp;|&nbsp;
+       🎯 <strong style="color:var(--text)">${activity}</strong> &nbsp;|&nbsp;
+       🕐 <strong style="color:var(--text)">${hour}:00</strong><br/>
+       <span style="font-size:10px;color:rgba(255,255,255,0.3)">Updated: ${new Date().toLocaleTimeString()}</span>`;
+    toast('✅ Context pushed!');
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '📡 Push Context to Server';
+    showTestResult('ctx-result', false, 'Failed: ' + e.message);
+  }
+}
+
+function autoDetectLocation() {
+  const btn = document.getElementById('geo-btn');
+  const res = document.getElementById('geo-result');
+  if (!navigator.geolocation) { res.textContent = '❌ Geolocation not supported'; return; }
+
+  btn.disabled = true; btn.textContent = '🛰️ Detecting…';
+  res.textContent = '';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      btn.disabled = false; btn.textContent = '🛰️ Detect My Location';
+      const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+      res.innerHTML = `📍 Lat: <strong style="color:var(--text)">${lat.toFixed(5)}</strong> · Lon: <strong style="color:var(--text)">${lon.toFixed(5)}</strong><br/>
+        <span style="font-size:10px;color:var(--muted)">Accuracy: ±${Math.round(accuracy)}m</span>`;
+      setPerm('geo', 'granted');
+      // Push with coordinates
+      if (serverBase) {
+        const location = document.getElementById('ctx-location').value;
+        const activity = document.getElementById('ctx-activity').value;
+        fetch(serverBase + '/device/context', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ location, activity, hour: new Date().getHours(), lat, lon })
+        }).then(() => toast('📍 Location synced!')).catch(() => {});
+      }
+    },
+    (err) => {
+      btn.disabled = false; btn.textContent = '🛰️ Detect My Location';
+      res.textContent = '❌ ' + err.message;
+      setPerm('geo', 'denied');
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+// ─── Wizard ──────────────────────────────────────────────────────────────────
+function wizardNext() {
+  if (wizardStep < 2) {
+    document.getElementById('wz-' + wizardStep).classList.remove('active');
+    wizardStep++;
+    document.getElementById('wz-' + wizardStep).classList.add('active');
+    updateWizardDots();
+  }
+}
+function wizardBack() {
+  if (wizardStep > 0) {
+    document.getElementById('wz-' + wizardStep).classList.remove('active');
+    wizardStep--;
+    document.getElementById('wz-' + wizardStep).classList.add('active');
+    updateWizardDots();
+  }
+}
+function wizardReset() {
+  document.getElementById('wz-' + wizardStep).classList.remove('active');
+  wizardStep = 0;
+  document.getElementById('wz-0').classList.add('active');
+  updateWizardDots();
+}
+function updateWizardDots() {
+  for (let i = 0; i < 3; i++) {
+    const el = document.getElementById('ws-' + i);
+    el.className = 'wizard-step' + (i < wizardStep ? ' done' : i === wizardStep ? ' active' : '');
+  }
+}
+
+// ─── Setup URLs ────────────────────────────────────────────────────────────────
+function updateSetupURLs(data) {
+  const base = serverBase || 'http://<server>:8000';
+  const xmlUrl = base + '/device/tasker-xml';
+  const pushUrl = base + '/push';
+  const xmlEl  = document.getElementById('xml-url-display');
+  const pushEl = document.getElementById('push-endpoint-wz');
+  if (xmlEl)  xmlEl.textContent  = xmlUrl;
+  if (pushEl) pushEl.textContent = pushUrl;
+}
+
+// ─── Tasker XML download ───────────────────────────────────────────────────────
+function downloadTaskerXML() {
+  if (!serverBase) { toast('Connect to server first'); return; }
+  window.location.href = serverBase + '/device/tasker-xml';
+  toast('⬇️ Downloading Tasker XML…');
+}
+
+function copyEndpoint() {
+  const el = document.getElementById('push-endpoint-wz');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => toast('✅ Copied!'));
+}
+</script>
+</body>
+</html>

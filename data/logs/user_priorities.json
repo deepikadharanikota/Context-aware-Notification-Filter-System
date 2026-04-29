@@ -1,0 +1,1 @@
+{"vipPersons": [], "appWeights": {"whatsapp": 70, "gmail": 65, "slack": 80, "instagram": 20, "twitter": 15, "youtube": 10, "sms": 75, "phone": 90}, "keywords": ["urgent", "deadline", "emergency", "asap", "critical"], "focusHours": [9, 10, 11, 14, 15, 16], "thresholdSend": 80, "thresholdDelay": 70, "spamKeywords": [], "spamEnabled": true}
