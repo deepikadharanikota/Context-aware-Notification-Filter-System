@@ -131,12 +131,6 @@ bash start.sh
 
 ---
 
-🤝 Contributing
-
-Contributions are welcome!
-Feel free to fork the repo and submit a pull request.
-
----
 
 📜 License
 
@@ -146,7 +140,7 @@ This project is for educational purposes.
 
 👩‍💻 Author
 
-Deepika Dharanikota**
+Dharanikota Naga Deepika**
 GitHub: https://github.com/deepikadharanikota
 
 ---
